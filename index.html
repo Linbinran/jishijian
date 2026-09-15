@@ -197,7 +197,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 
 /* ---------- 弹窗 ---------- */
 .modal-mask{
-  position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:100;
+  position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:400;
   display:none;align-items:center;justify-content:center;padding:16px;
 }
 .modal-mask.show{display:flex}
@@ -330,7 +330,8 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 .modal-head-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px}
 .modal-head-row h3{margin-bottom:0}
 .subpage.zhigh{z-index:150}
-.modal-mask.zhigh2{z-index:200}
+/* 通用弹窗内再弹出的二级弹窗（如固定安排、节假日、调休），保证始终盖在当前界面之上 */
+.modal-mask.top{z-index:600}
 
 /* ---------- 固定安排（每周） ---------- */
 .wd-row{margin-bottom:10px}
@@ -585,7 +586,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
   <div class="modal">
     <div class="modal-head-row">
       <h3 id="scheduleModalTitle">添加今日安排</h3>
-      <button class="btn small ghost" onclick="renderFixedPage();openPage('fixed')">添加固定安排</button>
+      <button class="btn small ghost" onclick="goFixedPage()">添加固定安排</button>
     </div>
     <div class="field"><label>任务名称（必填）</label>
       <div class="inp-plus">
@@ -663,7 +664,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 </div>
 
 <!-- ============ 弹窗：添加/编辑固定安排 ============ -->
-<div class="modal-mask" id="modal-fixed" onclick="maskClose(event,'modal-fixed')">
+<div class="modal-mask top" id="modal-fixed" onclick="maskClose(event,'modal-fixed')">
   <div class="modal" style="width:min(440px,94vw)">
     <h3 id="fixedModalTitle">添加固定安排</h3>
     <div class="field"><label>任务名称 *</label><input class="inp" id="fName" placeholder="例如：高等数学（课表）"></div>
@@ -682,7 +683,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 </div>
 
 <!-- ============ 弹窗：添加节假日 ============ -->
-<div class="modal-mask zhigh2" id="modal-holiday" onclick="maskClose(event,'modal-holiday')">
+<div class="modal-mask top" id="modal-holiday" onclick="maskClose(event,'modal-holiday')">
   <div class="modal" style="width:min(380px,92vw)">
     <h3>添加节假日</h3>
     <div class="field"><label>选择日期 *</label><input type="date" class="inp" id="holiDate"></div>
@@ -695,7 +696,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 </div>
 
 <!-- ============ 弹窗：添加调休 ============ -->
-<div class="modal-mask zhigh2" id="modal-swap" onclick="maskClose(event,'modal-swap')">
+<div class="modal-mask top" id="modal-swap" onclick="maskClose(event,'modal-swap')">
   <div class="modal" style="width:min(380px,92vw)">
     <h3>添加调休</h3>
     <div class="field"><label>选择日期 *</label><input type="date" class="inp" id="swapDate"></div>
@@ -804,6 +805,12 @@ var CATS = {
 function openPage(name) {
   document.getElementById('page-' + name).classList.add('open');
   document.body.style.overflow = 'hidden';
+}
+/* 从「添加今日安排」弹窗进入固定安排页：先收起原弹窗，再打开固定安排界面 */
+function goFixedPage() {
+  closeModal('modal-schedule');
+  renderFixedPage();
+  openPage('fixed');
 }
 function closePage() {
   document.querySelectorAll('.subpage.open').forEach(function (e) { e.classList.remove('open'); });
