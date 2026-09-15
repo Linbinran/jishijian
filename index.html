@@ -521,6 +521,10 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
     <h2>固定安排（每周循环）</h2>
   </div>
   <div class="subpage-body">
+    <div class="stat" style="margin-bottom:14px;text-align:left;line-height:1.8">
+      <div class="l" style="letter-spacing:0">单双周规则</div>
+      <div id="weekInfo" style="font-size:13px;color:var(--txt);margin-top:4px"></div>
+    </div>
     <div id="fixedWeekRows"></div>
     <div class="hs-bar">
       <button class="btn small ghost" onclick="openModal('modal-holiday')">添加节假日</button>
@@ -668,13 +672,19 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
   <div class="modal" style="width:min(440px,94vw)">
     <h3 id="fixedModalTitle">添加固定安排</h3>
     <div class="field"><label>任务名称 *</label><input class="inp" id="fName" placeholder="例如：高等数学（课表）"></div>
+    <div class="field"><label>周次模式 *</label>
+      <select class="inp" id="fWeekMode">
+        <option value="all">每周</option>
+        <option value="odd">单周（以本周为起点）</option>
+        <option value="even">双周（以本周为起点）</option>
+      </select>
+    </div>
     <div class="field-row">
       <div class="field"><label>开始时间 *</label><input type="time" class="inp" id="fTimeStart"></div>
       <div class="field"><label>结束时间 *</label><input type="time" class="inp" id="fTimeEnd"></div>
     </div>
     <div class="field"><label>地点（选填）</label><input class="inp" id="fLoc" placeholder="如：教学楼 A201"></div>
     <div class="field"><label>备注（选填）</label><textarea class="inp" id="fNotes" rows="2"></textarea></div>
-    <div class="hint">固定安排按星期几每周循环，起始与终止时间为必填；遇节假日当天不显示，遇调休按指定星期几显示。</div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-fixed')">取消</button>
       <button class="btn primary" onclick="saveFixed()">保存</button>
@@ -778,12 +788,43 @@ var noteSections = load('noteSections', []);
 var bills = load('bills', []);
 var checkinGroups = load('checkinGroups', []);
 var fixedSchedules = load('fixedSchedules', []);
+/* 单双周的「第一周」起点：首次记录为当时所在周的周一，之后不再改变 */
+var weekStart = load('weekStart', '');
+if (!weekStart) {
+  var _nd = new Date();
+  var _day = (_nd.getDay() + 6) % 7;
+  var _mon = new Date(_nd.getFullYear(), _nd.getMonth(), _nd.getDate() - _day);
+  weekStart = _mon.getFullYear() + '-' + pad(_mon.getMonth() + 1) + '-' + pad(_mon.getDate());
+  save('weekStart', weekStart);
+}
+function weekAnchor() { return weekStart; }
 var holidays = load('holidays', []);
 var swaps = load('swaps', []);
 var commonNames = load('commonNames', []);
 var commonPlaces = load('commonPlaces', []);
 
 var WD_NAMES = { 0: '周日', 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六' };
+var WM_NAMES = { all: '每周', odd: '单周', even: '双周' };
+/* 以「第一周起点」为第 1 周，计算某日期所处周次（1、2、3…） */
+function weekIndex(dateStr) {
+  var d = parseDate(dateStr);
+  if (!d) return 1;
+  var base = parseDate(weekAnchor());
+  if (!base) return 1;
+  var u = 86400000;
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  var b = new Date(base.getFullYear(), base.getMonth(), base.getDate()).getTime();
+  return Math.floor((x - b) / (7 * u)) + 1;
+}
+/* 该日期的固定安排是否应按指定模式显示 */
+function weekModeMatch(mode, dateStr) {
+  var n = weekIndex(dateStr);
+  if (n < 1) return true;
+  if (mode === 'odd') return n % 2 === 1;
+  if (mode === 'even') return n % 2 === 0;
+  return true;
+}
+function weekModeText(mode) { return WM_NAMES[mode] || '每周'; }
 /* 某日期生效的星期几：节假日返回 -1（无固定事项），调休返回指定星期 */
 function effectiveWeekday(dateStr) {
   if (holidays.indexOf(dateStr) >= 0) return -1;
@@ -1111,8 +1152,11 @@ function renderSchedules() {
     if (!s.done) list.push({ one: true, s: s });
   });
   if (eff >= 0) {
+    var todayKey = todayStr();
     fixedSchedules.forEach(function (f) {
-      if (f.weekday === eff) list.push({ one: false, f: f });
+      if (f.weekday !== eff) return;
+      if (!weekModeMatch(f.weekMode || 'all', todayKey)) return;
+      list.push({ one: false, f: f });
     });
   }
   /* 有开始时间的按时间先后排前，没填时间的排最后 */
@@ -1146,13 +1190,16 @@ function renderSchedules() {
     var f = it.f;
     var ftm = timeRangeText(f.startTime, f.endTime);
     var fmeta = [];
+    if (f.weekMode && f.weekMode !== 'all') fmeta.push('周次 ' + weekModeText(f.weekMode));
     if (f.location) fmeta.push('地点 ' + esc(f.location));
     if (f.notes) fmeta.push('备注 ' + esc(f.notes));
     return '<div class="item">' +
       '<div class="time-col">' + esc(ftm) + '</div>' +
       '<div class="item-main">' +
         '<div class="item-title">' + esc(f.name) +
-          '<span class="cat-tag" style="color:var(--red);border-color:var(--red)">每周固定</span>' +
+          '<span class="cat-tag" style="color:var(--red);border-color:var(--red)">每周固定' +
+            (f.weekMode === 'odd' ? '·单周' : f.weekMode === 'even' ? '·双周' : '') +
+          '</span>' +
         '</div>' +
         '<div class="item-meta">' + (fmeta.join(' · ') || '—') + '</div>' +
       '</div>' +
@@ -1585,6 +1632,7 @@ function openFixedModal(wd) {
   _editFixedId = null;
   document.getElementById('fixedModalTitle').textContent = '添加固定安排 · ' + WD_NAMES[wd];
   document.getElementById('fName').value = '';
+  document.getElementById('fWeekMode').value = 'all';
   document.getElementById('fTimeStart').value = '';
   document.getElementById('fTimeEnd').value = '';
   document.getElementById('fLoc').value = '';
@@ -1599,6 +1647,7 @@ function openFixedEdit(id) {
   _editFixedId = id;
   document.getElementById('fixedModalTitle').textContent = '编辑固定安排 · ' + WD_NAMES[f.weekday];
   document.getElementById('fName').value = f.name || '';
+  document.getElementById('fWeekMode').value = f.weekMode || 'all';
   document.getElementById('fTimeStart').value = f.startTime || '';
   document.getElementById('fTimeEnd').value = f.endTime || '';
   document.getElementById('fLoc').value = f.location || '';
@@ -1613,7 +1662,9 @@ function saveFixed() {
   if (!ts || !te) { alert('固定安排需同时填写开始与结束时间'); return; }
   if (te < ts) { alert('结束时间不能早于开始时间'); return; }
   var fields = {
-    weekday: _fixedWeekday, name: name,
+    weekday: _fixedWeekday,
+    weekMode: document.getElementById('fWeekMode').value || 'all',
+    name: name,
     startTime: ts, endTime: te,
     location: document.getElementById('fLoc').value.trim(),
     notes: document.getElementById('fNotes').value.trim()
@@ -1645,18 +1696,28 @@ function delFixed(id) {
 function renderFixedPage() {
   var wrap = document.getElementById('fixedWeekRows');
   if (!wrap) return;
+  var n = weekIndex(todayStr());
+  var info = document.getElementById('weekInfo');
+  if (info) {
+    info.innerHTML = '第一周起点：' + weekAnchor() + '（周一） · 今天处于第 <b style="color:var(--red)">' + n +
+      '</b> 周 → ' + (n % 2 === 1 ? '<b style="color:var(--red)">单周</b>' : '<b style="color:var(--red)">双周</b>') +
+      '，其中「单周」事项在奇数周显示，「双周」事项在偶数周显示，「每周」事项每周都显示。';
+  }
   var order = [1, 2, 3, 4, 5, 6, 0];
   wrap.innerHTML = order.map(function (wd) {
     var items = fixedSchedules.filter(function (f) { return f.weekday === wd; });
     items.sort(function (a, b) { return (a.startTime || '').localeCompare(b.startTime || ''); });
     var rows = items.map(function (f) {
       var meta = [];
+      if (f.weekMode && f.weekMode !== 'all') meta.push('周次 ' + weekModeText(f.weekMode));
       if (f.location) meta.push('地点 ' + esc(f.location));
       if (f.notes) meta.push('备注 ' + esc(f.notes));
+      var wmTag = f.weekMode === 'odd' ? '<span class="cat-tag" style="color:#4f6f9f;border-color:#4f6f9f">单周</span>'
+        : f.weekMode === 'even' ? '<span class="cat-tag" style="color:#8a5f9e;border-color:#8a5f9e">双周</span>' : '';
       return '<div class="item">' +
         '<div class="time-col">' + esc(timeRangeText(f.startTime, f.endTime)) + '</div>' +
         '<div class="item-main">' +
-          '<div class="item-title">' + esc(f.name) + '</div>' +
+          '<div class="item-title">' + esc(f.name) + wmTag + '</div>' +
           (meta.length ? '<div class="item-meta">' + meta.join(' · ') + '</div>' : '') +
         '</div>' +
         '<button class="edit-btn" title="编辑" onclick="openFixedEdit(\'' + f.id + '\')">✎</button>' +
