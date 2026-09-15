@@ -83,17 +83,40 @@ h2.linkish .arr{font-size:13px;color:var(--red);margin-left:4px}
 .tl-panel{margin-top:14px}
 .tl-nav{display:flex;gap:6px;align-items:center}
 #tlMonthLabel{font-size:13px;color:var(--sub);min-width:110px;text-align:center}
+.tl-month-inp{width:auto;min-width:132px;padding:5px 8px;font-size:13px}
+.tl-tip{font-size:11px;color:#a3946f;margin-top:6px}
+.tl-month-label{
+  position:absolute;top:0;transform:translateX(-50%);
+  font-size:11px;line-height:1.25;color:#a3946f;white-space:nowrap;pointer-events:none;text-align:center;
+}
+/* 日期标尺：悬挂在 .tl-wrap 上方（负 top 落进 .tl-scroll 的 padding-top 区）。
+   两行结构：top:0 = 月份行（月份名写在每月 1 号与上月最后一天之间的分隔线正上方），
+   top:18px = 日期行（M/D 主标签 + 周X 副标签），两行各自独立互不重叠 */
+.tl-ruler{position:absolute;left:0;top:-52px;width:100%;height:50px;pointer-events:none}
+/* 刻度层：挂在 .tl-axis（position:relative 且宽度=W）内，以轴线为基准上下各伸出 4px */
+#tlTicks{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.tl-mon{
+  position:absolute;left:0;top:0;width:1px;height:100%;margin:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(138,109,31,.05),rgba(138,109,31,.45),rgba(138,109,31,.05));
+}
+.tl-mon.major{width:2px;background:linear-gradient(180deg,rgba(138,109,31,.08),rgba(138,109,31,.7),rgba(138,109,31,.08))}
+/* 月份分隔线 / 标尺 / 今天竖线 / 事件 均以 .tl-wrap 为定位参照，
+   不放进带 margin 的中间容器，避免定位参照系缩水导致轴尾被裁。
+   grid 与今天竖线向上延伸 52px，穿过月份行与日期行、与下方轴体连成一线 */
+.tl-grid{position:absolute;left:0;top:-52px;width:100%;height:calc(100% + 52px);pointer-events:none}
+.tl-todayline{top:-52px;height:calc(100% + 52px);bottom:auto}
 .main-panels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
 
 /* ---------- 时间轴 ---------- */
-.tl-scroll{overflow-x:auto;padding-bottom:8px}
-.tl-scroll::-webkit-scrollbar{height:8px}
-.tl-scroll::-webkit-scrollbar-track{background:#efe8d3;border-radius:4px}
-.tl-scroll::-webkit-scrollbar-thumb{background:#d8c9a0;border-radius:4px}
+.tl-scroll{overflow-x:auto;padding-top:52px;padding-bottom:4px;scrollbar-width:none;-ms-overflow-style:none;cursor:grab}
+.tl-scroll.dragging{cursor:grabbing}
+.tl-scroll::-webkit-scrollbar{height:0;display:none}
 .tl-wrap{position:relative}
-.tl-events{position:relative}
+/* 事件层设 margin-bottom 让下方 axis 自然排在事件之后；左右不设 margin，
+   与绝对定位的 .tl-grid／标尺／刻度保持同一水平基准（轴尾不再被裁） */
+.tl-events{position:relative;margin:0 0 8px 0}
 .tl-axis{
-  position:relative;height:2px;margin:10px 14px 8px 0;
+  position:relative;height:2px;margin:10px 0 8px 0;
   background:linear-gradient(90deg,rgba(138,109,31,.4),#8a6d1f);
   box-shadow:0 1px 4px rgba(138,109,31,.25);
 }
@@ -380,13 +403,12 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
     <div class="panel-head">
       <h2>日程时间轴</h2>
       <div class="tl-nav">
-        <button class="btn small ghost" onclick="tlGo(-1)">‹</button>
-        <span id="tlMonthLabel"></span>
-        <button class="btn small ghost" onclick="tlGo(1)">›</button>
-        <button class="btn small" onclick="tlGo(0)">回到本月</button>
+        <input type="month" class="inp tl-month-inp" id="tlMonthPick" onchange="tlGotoMonth(this.value)" title="选择年月定位">
+        <button class="btn small" onclick="tlToday()">回到今天</button>
       </div>
     </div>
     <div class="tl-scroll" id="tlScroll"><div id="tlBody"></div></div>
+    <div class="tl-tip">按住拖动 / 手指左右滑动即可平移时间轴 · 右上角可手动选择年月定位</div>
     <div class="legend" id="tlLegend"></div>
   </section>
 
@@ -537,7 +559,7 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 <!-- ============ 子页面：常用任务名称 / 常用地点 ============ -->
 <section class="subpage zhigh" id="page-common">
   <div class="subpage-head">
-    <button class="btn small ghost" onclick="closePage()">← 返回</button>
+    <button class="btn small ghost" onclick="backFromCommon()">← 返回</button>
     <h2 id="commonTitle">常用任务名称</h2>
   </div>
   <div class="subpage-body">
@@ -886,21 +908,62 @@ function renderDate() {
 }
 
 /* ================= 时间轴 ================= */
-var tlOffset = 0;
-function tlGo(d) { tlOffset = (d === 0) ? 0 : tlOffset + d; renderTimeline(); }
+/* ================= 时间轴（连续模式：从今天起向右无限延伸） ================= */
+var TL_YEARS = 10;             // 连续时间跨度（年）：今天 ~ 今天+10年（近似无限向右延伸）
+var TL_CW = 52;                // 每天宽度
+var _tlBase = null, _tlDays = 0;
+
+function tlDayWidth() { return (window.innerWidth < 640) ? 42 : TL_CW; }
+function tlMonthsSpan() { return TL_YEARS * 12 + 1; }
+function tlStartDate() {
+  if (!_tlBase) { var n = new Date(); _tlBase = new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+  return _tlBase;
+}
+function tlDateAt(i) { var b = tlStartDate(); return new Date(b.getFullYear(), b.getMonth(), b.getDate() + i); }
+/* 按「天」对齐计算索引，避免因当前时刻导致今天的索引偏移 */
+function tlIndexAt(d) {
+  var b = tlStartDate();
+  var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  var y = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.round((x - y) / 86400000);
+}
+function tlTodayIndex() { return tlIndexAt(new Date()); }
+
+/* 顶部「今天」标记与轴单位：0=日 1=周 2=月 */
+function tlZoom() {
+  var w = tlDayWidth();
+  return { day: w, week: w * 7, month: w * 30.44 };
+}
+
+function tlToday() { tlScrollToIndex(tlTodayIndex(), true); }
+function tlScrollToIndex(i, center) {
+  var sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  var x = (i + 0.5) * tlDayWidth();
+  sc.scrollLeft = center ? Math.max(0, x - sc.clientWidth / 2) : Math.max(0, x - sc.clientWidth * 0.35);
+}
+function tlGotoMonth(v) {
+  if (!v) return;
+  var p = v.split('-').map(Number);
+  if (p.length < 2) return;
+  var target = (p[0] - tlStartDate().getFullYear()) * 12 + (p[1] - 1 - tlStartDate().getMonth());
+  /* 以目标月 15 号（或该月 1 号）为定位点 */
+  var d = new Date(p[0], p[1] - 1, 15);
+  tlScrollToIndex(tlIndexAt(d), true);
+  updateTlLabel();
+}
 
 function renderTimeline() {
   var box = document.getElementById('tlBody');
-  var now = new Date();
-  var d0 = new Date(now.getFullYear(), now.getMonth() + tlOffset, 1);
-  var y = d0.getFullYear(), m = d0.getMonth();
-  var dim = new Date(y, m + 1, 0).getDate();
-  var CW = (window.innerWidth < 640) ? 42 : 52;
-  var W = dim * CW;
-  var isCur = tlOffset === 0;
-  var todayD = now.getDate();
-  var mS = new Date(y, m, 1), mE = new Date(y, m, dim);
+  if (!box) return;
+  var CW = tlDayWidth();
+  var total = Math.ceil(TL_YEARS * 365.25) + 2;
+  _tlDays = total;
+  var W = total * CW;
+  var tIdx = tlTodayIndex();
+  var months = tlMonthsSpan();
 
+  /* 事件：跨月连续绘制（按绝对天数计算，不再按月切分） */
   var evs = [];
   todos.forEach(function (t) {
     if (t.done) return;
@@ -908,22 +971,22 @@ function renderTimeline() {
     var e = parseDate(t.endDate || t.startDate);
     if (!s) return;
     if (!e || e < s) e = s;
-    if (e < mS || s > mE) return;
-    var sd = (s.getFullYear() === y && s.getMonth() === m) ? s.getDate() : 1;
-    var ed = (e.getFullYear() === y && e.getMonth() === m) ? e.getDate() : dim;
-    evs.push({ t: t, sd: sd, ed: ed, color: (CATS[t.category] || { color: '#8a6d1f' }).color });
+    var si = tlIndexAt(s), ei = tlIndexAt(e);
+    if (ei < 0 || si > total) return;
+    if (si < 0) si = 0;
+    if (ei > total) ei = total;
+    evs.push({ t: t, si: si, ei: ei, color: (CATS[t.category] || { color: '#8a6d1f' }).color });
   });
-  evs.sort(function (a, b) { return a.sd - b.sd || b.ed - a.ed; });
+  evs.sort(function (a, b) { return a.si - b.si || b.ei - a.ei; });
 
   var rowEnd = [];
   evs.forEach(function (ev) {
     var r = -1;
-    for (var i = 0; i < rowEnd.length; i++) { if (rowEnd[i] < ev.sd) { r = i; break; } }
+    for (var i = 0; i < rowEnd.length; i++) { if (rowEnd[i] < ev.si) { r = i; break; } }
     if (r < 0) { rowEnd.push(0); r = rowEnd.length - 1; }
-    rowEnd[r] = ev.ed;
+    rowEnd[r] = ev.ei;
     ev.row = r;
   });
-
   var ROWH = 44;
   var evH = Math.max(rowEnd.length, 1) * ROWH;
 
@@ -931,39 +994,176 @@ function renderTimeline() {
   evs.forEach(function (ev) {
     var top = ev.row * ROWH + 4;
     var label = esc(ev.t.name);
-    if (ev.sd === ev.ed) {
-      var cx = (ev.sd - 0.5) * CW;
+    if (ev.si === ev.ei) {
+      var cx = (ev.si + 0.5) * CW;
       evh += '<div class="tl-label" style="left:' + cx + 'px;top:' + top + 'px;color:' + ev.color + '">' + label + '</div>';
       evh += '<div class="tl-dot" style="left:' + cx + 'px;top:' + (top + 18) + 'px;background:' + ev.color + ';box-shadow:0 0 10px ' + ev.color + '99"></div>';
     } else {
-      var x1 = (ev.sd - 1) * CW + 3, x2 = ev.ed * CW - 3;
+      var x1 = ev.si * CW + 3, x2 = (ev.ei + 1) * CW - 3;
       evh += '<div class="tl-bar" style="left:' + x1 + 'px;width:' + Math.max(x2 - x1, 20) + 'px;top:' + (top + 12) + 'px;background:' + ev.color + '">' + label + '</div>';
     }
   });
 
-  var days = '', ticks = '';
-  for (var i = 1; i <= dim; i++) {
-    var isT = isCur && i === todayD;
-    days += '<div class="tl-day' + (isT ? ' today' : '') + '" style="width:' + CW + 'px">' + i + '</div>';
-    ticks += '<div class="tl-tick' + (isT ? ' today' : '') + '" style="left:' + ((i - 0.5) * CW) + 'px"></div>';
+  /* 月份分隔线随可视区动态生成（见 syncTlRuler），此处不再静态铺满整轴 */
+  var b = tlStartDate();
+  var anchors = [];
+  var cur = new Date(b.getFullYear(), b.getMonth(), 1);
+  for (var k = 0; k < months; k++) {
+    var idx = tlIndexAt(cur);
+    if (idx > total) break;
+    anchors.push({ idx: idx, label: (cur.getMonth() === 0 || k === 0) ? (cur.getFullYear() + '年' + (cur.getMonth() + 1) + '月') : ((cur.getMonth() + 1) + '月') });
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
   }
 
-  var tx = isCur ? ((todayD - 0.5) * CW) : -1000;
+  /* 月份选择器的可选范围：今天所在月 ~ 轴末月，并可定位到轴内任意月份 */
+  var inp = document.getElementById('tlMonthPick');
+  if (inp) {
+    inp.min = b.getFullYear() + '-' + pad(b.getMonth() + 1);
+    var last = tlDateAt(total);
+    inp.max = last.getFullYear() + '-' + pad(last.getMonth() + 1);
+  }
+
+  /* 顶部日期标尺：位置变化时按可视范围生成（见 syncTlRuler） */
+  var tx = tIdx >= 0 ? ((tIdx + 0.5) * CW) : -1000;
+
+  /* 结构说明：月份分隔线 grid / 事件 evh / 今天竖线 / 标尺 全部相对 .tl-wrap 绝对定位。
+     若把 grid 放进 .tl-axis 内部，会因 .tl-axis 的左右 margin 使 .tl-axis 宽度 < W，
+     绝对定位子元素以 padding box 为参照 → 轴尾（远期月份）被裁掉，表现为「划到未来没有节点」。 */
   box.innerHTML =
-    '<div class="tl-wrap" style="width:' + W + 'px">' +
-      (isCur ? '<div class="tl-todayline" style="left:' + tx + 'px"></div>' : '') +
+    '<div class="tl-wrap" style="width:' + W + 'px" id="tlWrap">' +
+      '<div class="tl-grid" id="tlGrid"></div>' +
       '<div class="tl-events" style="height:' + evH + 'px">' + evh + '</div>' +
-      '<div class="tl-axis">' + ticks + '<div class="tl-arrowhead"></div></div>' +
-      '<div class="tl-days">' + days + '</div>' +
+      '<div class="tl-todayline" id="tlTodayLine" style="left:' + tx + 'px"></div>' +
+      '<div class="tl-ruler" id="tlRuler"></div>' +
+      '<div class="tl-axis"><div id="tlTicks"></div><div class="tl-arrowhead" id="tlArrow"></div></div>' +
     '</div>';
 
-  document.getElementById('tlMonthLabel').textContent = y + '年' + (m + 1) + '月' + (isCur ? ' · 本月' : '');
-
-  if (isCur) {
-    var sc = document.getElementById('tlScroll');
-    sc.scrollLeft = Math.max(0, (todayD - 0.5) * CW - sc.clientWidth / 2);
-  }
+  box.__anchors = anchors;
+  updateTlLabel();
+  syncTlRuler();
 }
+
+/* 日期标尺与箭头：只渲染当前可视范围内的刻度，保证长轴流畅 */
+function syncTlRuler() {
+  var sc = document.getElementById('tlScroll');
+  var box = document.getElementById('tlBody');
+  if (!sc || !box || !box.__anchors) return;
+  var CW = tlDayWidth();
+  var left = sc.scrollLeft, right = left + sc.clientWidth;
+  var total = _tlDays;
+  var ruler = document.getElementById('tlRuler');
+  var ticks = document.getElementById('tlTicks');
+
+  var lo = Math.max(0, Math.floor(left / CW) - 2);
+  var hi = Math.min(total, Math.ceil(right / CW) + 2);
+  var rows = '', tk = '';
+  for (var i = lo; i <= hi; i++) {
+    var d = tlDateAt(i);
+    var x = (i + 0.5) * CW;
+    var isT = i === tlTodayIndex();
+    var isFirst = d.getDate() === 1;
+    var wd = '日一二三四五六'.charAt(d.getDay());
+    /* 日期行（top:18px）：主标签 = M/D，副标签 = 周X（今天显示「今天」）。
+       1 号副标签不再写「X月」，月份名统一放到月份行，避免文字叠文字 */
+    var label = (d.getMonth() + 1) + '/' + d.getDate();
+    var sub = isT ? '今天' : '周' + wd;
+    if (isFirst) {
+      /* 月份行（top:0）：月份名居中写在分隔线（上月最后一天 | 本月 1 号分界）正上方 */
+      var ml = (d.getMonth() === 0 ? d.getFullYear() + '年' : '') + (d.getMonth() + 1) + '月';
+      rows += '<div class="tl-month-label" style="left:' + (i * CW) + 'px;top:0;color:#8a6d1f;font-weight:700">' + ml + '</div>';
+    }
+    rows += '<div class="tl-month-label' + (isT ? ' today-lb' : '') + '" style="left:' + x + 'px;top:18px;color:' +
+      (isT ? 'var(--red)' : (isFirst ? '#8a6d1f' : '#a3946f')) + ';font-weight:' + (isT || isFirst ? '700' : '400') + '">' +
+      label + '<i style="display:block;font-style:normal;opacity:.75;transform:scale(.92)">' + sub + '</i></div>';
+    tk += '<div class="tl-tick' + (isT ? ' today' : '') + '" style="left:' + x + 'px;opacity:' +
+      (isFirst ? '1' : '0.35') + '"></div>';
+  }
+  if (ruler) ruler.innerHTML = rows;
+  if (ticks) ticks.innerHTML = tk;
+
+  /* 轴起点是「今天」，本月没有 1 号节点：在最左端补写本月月份名（左对齐避免被裁半） */
+  if (ruler && lo === 0) {
+    var bd = tlStartDate();
+    ruler.insertAdjacentHTML('beforeend',
+      '<div class="tl-month-label" style="left:2px;top:0;transform:none;color:#8a6d1f;font-weight:700">' +
+      (bd.getMonth() + 1) + '月</div>');
+  }
+
+  /* 月份分隔线：随可视范围动态生成（月份名改由上方日期循环写入月份行，此处只画线） */
+  var gbox = document.getElementById('tlGrid');
+  if (gbox) {
+    var ghtml = '';
+    var mid = tlDateAt(Math.max(0, Math.min(total, Math.floor((left + right) / 2 / CW))));
+    var cur = new Date(mid.getFullYear(), mid.getMonth() - 1, 1);
+    for (var g = 0; g < 4; g++) {
+      var gd = new Date(cur.getFullYear(), cur.getMonth() + g, 1);
+      var gi = tlIndexAt(gd);
+      if (gi < 0 || gi > total) continue;
+      var gx = gi * CW;
+      if (gx + 80 < left || gx - 80 > right) continue;
+      ghtml += '<div class="tl-mon' + (gd.getMonth() === 0 ? ' major' : '') + '" style="left:' + gx + 'px"></div>';
+    }
+    gbox.innerHTML = ghtml;
+  }
+
+  /* 轴末端箭头跟随可视右边界 */
+  var arrow = document.getElementById('tlArrow');
+  if (arrow) arrow.style.display = 'none';
+}
+
+/* 右上角当前可视月份（滚动到哪里显示哪里） */
+function updateTlLabel() {
+  var sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  var CW = tlDayWidth();
+  var centerIdx = Math.floor((sc.scrollLeft + sc.clientWidth / 2) / CW);
+  if (centerIdx < 0) centerIdx = 0;
+  if (centerIdx > _tlDays) centerIdx = _tlDays;
+  var d = tlDateAt(centerIdx);
+  var isCurMonth = (d.getFullYear() === new Date().getFullYear() && d.getMonth() === new Date().getMonth());
+  var inp = document.getElementById('tlMonthPick');
+  if (inp && !inp.matches(':focus')) {
+    inp.value = d.getFullYear() + '-' + pad(d.getMonth() + 1);
+  }
+  var lb = document.getElementById('tlMonthLabel');
+  if (lb) lb.textContent = d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + (isCurMonth ? ' · 本月' : '');
+}
+
+/* 拖拽 / 触摸平移（电脑端按住拖动，移动端左右滑动） */
+(function initTlDrag() {
+  var sc = document.getElementById('tlScroll');
+  if (!sc) return;
+  var down = false, sx = 0, sl = 0;
+  sc.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    down = true; sx = e.clientX; sl = sc.scrollLeft;
+    sc.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!down) return;
+    sc.scrollLeft = sl - (e.clientX - sx);
+    updateTlLabel();
+    syncTlRuler();     // 拖拽不会触发 scroll 事件，需手动刷新刻度/月份线
+  });
+  window.addEventListener('mouseup', function () {
+    if (!down) return;
+    down = false;
+    sc.classList.remove('dragging');
+  });
+  sc.addEventListener('scroll', function () { updateTlLabel(); syncTlRuler(); }, { passive: true });
+  /* 移动端左右滑动：原生 overflow 滚动即可，这里补一次节流刷新，保证刻度跟手 */
+  var _tf = null;
+  sc.addEventListener('touchmove', function () {
+    if (_tf) return;
+    _tf = setTimeout(function () { _tf = null; updateTlLabel(); syncTlRuler(); }, 60);
+  }, { passive: true });
+  var _rz = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(_rz);
+    _rz = setTimeout(function () { renderTimeline(); }, 200);
+  });
+})();
 
 function renderLegend() {
   var el = document.getElementById('tlLegend');
@@ -1046,6 +1246,7 @@ function completeTodo(id) {
   save('todos', todos);
   renderTodos();
   renderTimeline();
+  renderSchedules();
 }
 
 function renderTodos() {
@@ -1144,31 +1345,66 @@ function completeSchedule(id) {
   renderSchedules();
 }
 
+/* 编辑由待办同步到今日安排的条目：直接打开对应待办进行编辑 */
+function openTodoFromSchedule(id) { openTodoEdit(id); }
 function renderSchedules() {
   var el = document.getElementById('scheduleList');
-  var eff = effectiveWeekday(todayStr());
+  var td = todayStr();
+  var eff = effectiveWeekday(td);
   var list = [];
   schedules.forEach(function (s) {
     if (!s.done) list.push({ one: true, s: s });
   });
   if (eff >= 0) {
-    var todayKey = todayStr();
     fixedSchedules.forEach(function (f) {
       if (f.weekday !== eff) return;
-      if (!weekModeMatch(f.weekMode || 'all', todayKey)) return;
+      if (!weekModeMatch(f.weekMode || 'all', td)) return;
       list.push({ one: false, f: f });
     });
   }
+  /* 待办事项在生效当天与整个起止区间内同步显示：
+     单日且填了具体时间 → 按正常今日安排处理（参与时间排序、无「待办」标签）；
+     其余情况 → 走「未填时间」通道排在最后并标注「待办」 */
+  todos.forEach(function (t) {
+    if (t.done) return;
+    var s = t.startDate, e = t.endDate || t.startDate;
+    if (!parseDate(s) || !parseDate(e)) return;
+    if (td < s || td > e) return;
+    var sameDay = (s === e);
+    var hasTime = !!(t.startTime || t.endTime || t.time);
+    list.push({ td: t, normal: sameDay && hasTime });
+  });
   /* 有开始时间的按时间先后排前，没填时间的排最后 */
   list.sort(function (a, b) {
-    var ka = a.one ? (a.s.startTime || a.s.time || '') : (a.f.startTime || '');
-    var kb = b.one ? (b.s.startTime || b.s.time || '') : (b.f.startTime || '');
+    function key(o) {
+      if (o.one) return o.s.startTime || o.s.time || '';
+      if (o.td) return o.normal ? (o.td.startTime || o.td.time || '') : (o.td.startTime || o.td.time || '');
+      return o.f.startTime || '';
+    }
+    var ka = key(a), kb = key(b);
     if (!ka && !kb) return 0;
     if (!ka) return 1;
     if (!kb) return -1;
     return ka.localeCompare(kb);
   });
   el.innerHTML = list.length ? list.map(function (it) {
+    if (it.td) {
+      var t = it.td;
+      var ttm = timeRangeText(t.startTime, t.endTime) || t.time || '';
+      var tmeta = [];
+      if (t.location) tmeta.push('地点 ' + esc(t.location));
+      if (t.notes) tmeta.push('备注 ' + esc(t.notes));
+      var dtTag = it.normal ? ''
+        : '<span class="cat-tag" style="color:#8a6d1f;border-color:#8a6d1f">待办</span>';
+      return '<div class="item">' +
+        '<div class="time-col">' + (esc(ttm) || '未填') + '</div>' +
+        '<div class="item-main">' +
+          '<div class="item-title">' + esc(t.name) + dtTag + '</div>' +
+          '<div class="item-meta">' + (tmeta.join(' · ') || '—') + '</div>' +
+        '</div>' +
+        '<button class="edit-btn" title="编辑" onclick="openTodoFromSchedule(\'' + t.id + '\')">✎</button>' +
+      '</div>';
+    }
     if (it.one) {
       var s = it.s;
       var tm = timeRangeText(s.startTime, s.endTime) || s.time || '';
@@ -1190,17 +1426,12 @@ function renderSchedules() {
     var f = it.f;
     var ftm = timeRangeText(f.startTime, f.endTime);
     var fmeta = [];
-    if (f.weekMode && f.weekMode !== 'all') fmeta.push('周次 ' + weekModeText(f.weekMode));
     if (f.location) fmeta.push('地点 ' + esc(f.location));
     if (f.notes) fmeta.push('备注 ' + esc(f.notes));
     return '<div class="item">' +
       '<div class="time-col">' + esc(ftm) + '</div>' +
       '<div class="item-main">' +
-        '<div class="item-title">' + esc(f.name) +
-          '<span class="cat-tag" style="color:var(--red);border-color:var(--red)">每周固定' +
-            (f.weekMode === 'odd' ? '·单周' : f.weekMode === 'even' ? '·双周' : '') +
-          '</span>' +
-        '</div>' +
+        '<div class="item-title">' + esc(f.name) + '</div>' +
         '<div class="item-meta">' + (fmeta.join(' · ') || '—') + '</div>' +
       '</div>' +
       '<button class="edit-btn" title="编辑" onclick="openFixedEdit(\'' + f.id + '\')">✎</button>' +
@@ -1783,16 +2014,21 @@ function delSwap(id) {
   renderSchedules();
 }
 
-/* 常用任务名称 / 常用地点（安排与待办共用同一套数据，仅回填目标输入框不同） */
-var _commonType = 'name', _commonTarget = null, _commonReturn = null;
+/* 打开常用项页面：先收起当前弹窗（如添加今日安排 / 待办），返回时自动恢复 */
 function openCommon(type, targetId, returnTo) {
   _commonType = type;
   _commonTarget = targetId || (type === 'name' ? 'scName' : 'scLoc');
   _commonReturn = returnTo || null;
+  if (_commonReturn) closeModal(_commonReturn);
   document.getElementById('commonTitle').textContent = type === 'name' ? '常用任务名称' : '常用地点';
   document.getElementById('commonInput').value = '';
   renderCommonList();
   openPage('common');
+}
+/* 从常用项页面返回：若由弹窗进入则恢复原弹窗 */
+function backFromCommon() {
+  if (_commonReturn) { closePage(); openModal(_commonReturn); _commonReturn = null; return; }
+  closePage();
 }
 function renderCommonList() {
   var arr = _commonType === 'name' ? commonNames : commonPlaces;
@@ -1811,8 +2047,10 @@ function pickCommonIndex(i) {
   if (v == null) return;
   var target = document.getElementById(_commonTarget || (_commonType === 'name' ? 'scName' : 'scLoc'));
   if (target) target.value = v;
+  var ret = _commonReturn;
+  _commonReturn = null;
   closePage();
-  if (_commonReturn) { openModal(_commonReturn); _commonReturn = null; }
+  if (ret) openModal(ret);
 }
 function addCommon() {
   var inp = document.getElementById('commonInput');
@@ -1944,6 +2182,7 @@ function renderAll() {
 
 (function init() {
   renderAll();
+  tlToday();
   document.getElementById('importFile').addEventListener('change', importHandler);
   document.getElementById('askInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') askOk();
@@ -1954,11 +2193,6 @@ function renderAll() {
     var t = todayStr();
     if (t !== _lastDay) { _lastDay = t; renderAll(); }
   }, 30000);
-  var _rz = null;
-  window.addEventListener('resize', function () {
-    clearTimeout(_rz);
-    _rz = setTimeout(renderTimeline, 200);
-  });
 })();
 </script>
 <!-- PWA：Service Worker 注册（仅用于安装与离线缓存，不影响页面业务逻辑） -->
