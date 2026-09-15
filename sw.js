@@ -1,5 +1,6 @@
 /* 济时笺 PWA Service Worker：仅负责安装条件与离线缓存，不涉及任何业务逻辑 */
-var CACHE_NAME = 'jishijian-v1';
+/* 更新 index.html 后须递增版本号，避免 cache-first 让老用户拿到旧页面 */
+var CACHE_NAME = 'jishijian-v2';
 var ASSETS = ['./', './index.html', './manifest.json', './icon.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
