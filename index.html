@@ -309,6 +309,40 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 #lightbox.show{display:flex}
 #lightbox img{max-width:92vw;max-height:92vh;border:1px solid var(--red);border-radius:8px}
 
+/* ---------- 时间/日期左列与编辑按钮 ---------- */
+.time-col{
+  flex:0 0 78px;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  text-align:center;color:var(--red);font-weight:700;font-size:12px;line-height:1.5;
+  border-right:1px dashed var(--line);padding-right:8px;margin-right:2px;word-break:break-all;
+}
+.edit-btn{
+  background:none;border:1px solid var(--line);color:var(--sub);border-radius:8px;
+  padding:5px 9px;cursor:pointer;font-size:13px;line-height:1;transition:all .15s;white-space:nowrap;
+}
+.edit-btn:hover{border-color:var(--red);color:var(--red)}
+.inp-plus{display:flex;gap:8px;align-items:center}
+.inp-plus .inp{flex:1;min-width:0}
+.mini-plus{
+  flex:none;width:34px;height:34px;border:1px solid var(--red);color:var(--red);
+  background:transparent;border-radius:8px;font-size:16px;cursor:pointer;line-height:1;transition:all .15s;
+}
+.mini-plus:hover{background:var(--red);color:#fff}
+.modal-head-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px}
+.modal-head-row h3{margin-bottom:0}
+.subpage.zhigh{z-index:150}
+.modal-mask.zhigh2{z-index:200}
+
+/* ---------- 固定安排（每周） ---------- */
+.wd-row{margin-bottom:10px}
+.wd-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.wd-head h3{font-size:15px;letter-spacing:1px;border-left:3px solid var(--red);padding-left:9px}
+.hs-bar{display:flex;gap:8px;justify-content:flex-end;margin:16px 0 10px}
+.hs-block{margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hs-chip{
+  display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);
+  border-radius:20px;padding:4px 6px 4px 12px;background:var(--panel2);font-size:12px;
+}
+
 /* ---------- 响应式 ---------- */
 @media (max-width:900px){
   .main-panels{grid-template-columns:1fr}
@@ -479,10 +513,41 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
   </div>
 </section>
 
+<!-- ============ 子页面：固定安排（每周） ============ -->
+<section class="subpage zhigh" id="page-fixed">
+  <div class="subpage-head">
+    <button class="btn small ghost" onclick="closePage()">← 返回</button>
+    <h2>固定安排（每周循环）</h2>
+  </div>
+  <div class="subpage-body">
+    <div id="fixedWeekRows"></div>
+    <div class="hs-bar">
+      <button class="btn small ghost" onclick="openModal('modal-holiday')">添加节假日</button>
+      <button class="btn small ghost" onclick="openModal('modal-swap')">添加调休</button>
+    </div>
+    <div id="hsLists"></div>
+  </div>
+</section>
+
+<!-- ============ 子页面：常用任务名称 / 常用地点 ============ -->
+<section class="subpage zhigh" id="page-common">
+  <div class="subpage-head">
+    <button class="btn small ghost" onclick="closePage()">← 返回</button>
+    <h2 id="commonTitle">常用任务名称</h2>
+  </div>
+  <div class="subpage-body">
+    <div class="inline-form">
+      <input class="inp" id="commonInput" placeholder="输入新的常用名称">
+      <button class="btn" onclick="addCommon()">添加</button>
+    </div>
+    <div id="commonList"></div>
+  </div>
+</section>
+
 <!-- ============ 弹窗：添加待办 ============ -->
 <div class="modal-mask" id="modal-todo" onclick="maskClose(event,'modal-todo')">
   <div class="modal">
-    <h3>添加待办事项</h3>
+    <h3 id="tdModalTitle">添加待办事项</h3>
     <div class="field"><label>任务名称 *</label><input class="inp" id="tdName" placeholder="例如：高数第三章作业"></div>
     <div class="field"><label>类别 *</label>
       <select class="inp" id="tdCat">
@@ -497,15 +562,20 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
       <div class="field"><label>截止日期 *</label><input type="date" class="inp" id="tdEnd"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>开始时刻（可选）</label><input type="time" class="inp" id="tdTimeStart"></div>
+      <div class="field"><label>当日具体时刻（可选）</label><input type="time" class="inp" id="tdTimeStart"></div>
       <div class="field"><label>结束时刻（可选）</label><input type="time" class="inp" id="tdTimeEnd"></div>
     </div>
-    <div class="field"><label>地点（可选）</label><input class="inp" id="tdLoc" placeholder="如：教学楼 A201"></div>
+    <div class="field"><label>地点（可选）</label>
+      <div class="inp-plus">
+        <input class="inp" id="tdLoc" placeholder="如：教学楼 A201">
+        <button type="button" class="mini-plus" title="常用地点" onclick="openCommon('place','tdLoc','modal-todo')">＋</button>
+      </div>
+    </div>
     <div class="field"><label>备注（可选）</label><textarea class="inp" id="tdNotes" rows="2"></textarea></div>
     <div class="hint">规则：开始日期 = 截止日期 时，时间轴生成单点事件节点；起止日期不同时，时间轴绘制对应颜色的持续线段。时刻可只填一端，表示仅已知开始或结束时间。</div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-todo')">取消</button>
-      <button class="btn primary" onclick="addTodo()">保存</button>
+      <button class="btn primary" onclick="saveTodo()">保存</button>
     </div>
   </div>
 </div>
@@ -513,15 +583,28 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 <!-- ============ 弹窗：添加今日安排 ============ -->
 <div class="modal-mask" id="modal-schedule" onclick="maskClose(event,'modal-schedule')">
   <div class="modal">
-    <h3 id="scheduleModalTitle">添加今日安排</h3>
-    <div class="field"><label>任务名称（可选）</label><input class="inp" id="scName" placeholder="例如：小组讨论、健身"></div>
-    <div class="field-row">
-      <div class="field"><label>开始时间 *</label><input type="time" class="inp" id="scTimeStart"></div>
-      <div class="field"><label>结束时间（可选）</label><input type="time" class="inp" id="scTimeEnd"></div>
+    <div class="modal-head-row">
+      <h3 id="scheduleModalTitle">添加今日安排</h3>
+      <button class="btn small ghost" onclick="renderFixedPage();openPage('fixed')">添加固定安排</button>
     </div>
-    <div class="field"><label>地点（可选）</label><input class="inp" id="scLoc" placeholder="如：图书馆 3F"></div>
+    <div class="field"><label>任务名称（必填）</label>
+      <div class="inp-plus">
+        <input class="inp" id="scName" placeholder="例如：小组讨论、健身">
+        <button type="button" class="mini-plus" title="常用任务名称" onclick="openCommon('name','scName','modal-schedule')">＋</button>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>开始时间（选填）</label><input type="time" class="inp" id="scTimeStart"></div>
+      <div class="field"><label>结束时间（选填）</label><input type="time" class="inp" id="scTimeEnd"></div>
+    </div>
+    <div class="field"><label>地点（选填）</label>
+      <div class="inp-plus">
+        <input class="inp" id="scLoc" placeholder="如：图书馆 3F">
+        <button type="button" class="mini-plus" title="常用地点" onclick="openCommon('place','scLoc','modal-schedule')">＋</button>
+      </div>
+    </div>
     <div class="field"><label>备注（可选）</label><textarea class="inp" id="scNotes" rows="2"></textarea></div>
-    <div class="hint">时间段可只填开始一端，表示仅已知开始时间；今日安排仅在本模块展示，不会出现在顶部时间轴。</div>
+    <div class="hint">任务名称必填，时间可只填一端或不填（不填则排在当日列表最后）；今日安排仅在本模块展示，不会出现在顶部时间轴。每周固定事项请点右上角「添加固定安排」。</div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-schedule')">取消</button>
       <button class="btn primary" onclick="saveSchedule()">保存</button>
@@ -575,6 +658,62 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeModal('modal-checkitem')">取消</button>
       <button class="btn primary" onclick="addCheckItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：添加/编辑固定安排 ============ -->
+<div class="modal-mask" id="modal-fixed" onclick="maskClose(event,'modal-fixed')">
+  <div class="modal" style="width:min(440px,94vw)">
+    <h3 id="fixedModalTitle">添加固定安排</h3>
+    <div class="field"><label>任务名称 *</label><input class="inp" id="fName" placeholder="例如：高等数学（课表）"></div>
+    <div class="field-row">
+      <div class="field"><label>开始时间 *</label><input type="time" class="inp" id="fTimeStart"></div>
+      <div class="field"><label>结束时间 *</label><input type="time" class="inp" id="fTimeEnd"></div>
+    </div>
+    <div class="field"><label>地点（选填）</label><input class="inp" id="fLoc" placeholder="如：教学楼 A201"></div>
+    <div class="field"><label>备注（选填）</label><textarea class="inp" id="fNotes" rows="2"></textarea></div>
+    <div class="hint">固定安排按星期几每周循环，起始与终止时间为必填；遇节假日当天不显示，遇调休按指定星期几显示。</div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-fixed')">取消</button>
+      <button class="btn primary" onclick="saveFixed()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：添加节假日 ============ -->
+<div class="modal-mask zhigh2" id="modal-holiday" onclick="maskClose(event,'modal-holiday')">
+  <div class="modal" style="width:min(380px,92vw)">
+    <h3>添加节假日</h3>
+    <div class="field"><label>选择日期 *</label><input type="date" class="inp" id="holiDate"></div>
+    <div class="hint">该日期当天的固定安排（星期几循环事项）将不会出现在今日安排中。</div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-holiday')">取消</button>
+      <button class="btn primary" onclick="addHoliday()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：添加调休 ============ -->
+<div class="modal-mask zhigh2" id="modal-swap" onclick="maskClose(event,'modal-swap')">
+  <div class="modal" style="width:min(380px,92vw)">
+    <h3>添加调休</h3>
+    <div class="field"><label>选择日期 *</label><input type="date" class="inp" id="swapDate"></div>
+    <div class="field"><label>该日期按星期几的固定安排执行 *</label>
+      <select class="inp" id="swapWD">
+        <option value="1">周一</option>
+        <option value="2">周二</option>
+        <option value="3">周三</option>
+        <option value="4">周四</option>
+        <option value="5">周五</option>
+        <option value="6">周六</option>
+        <option value="0">周日</option>
+      </select>
+    </div>
+    <div class="hint">选择后，该日期的今日安排将按所选星期几的固定事项显示（而非原星期几）。</div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-swap')">取消</button>
+      <button class="btn primary" onclick="addSwap()">保存</button>
     </div>
   </div>
 </div>
@@ -637,6 +776,22 @@ var courseSections = load('courseSections', []);
 var noteSections = load('noteSections', []);
 var bills = load('bills', []);
 var checkinGroups = load('checkinGroups', []);
+var fixedSchedules = load('fixedSchedules', []);
+var holidays = load('holidays', []);
+var swaps = load('swaps', []);
+var commonNames = load('commonNames', []);
+var commonPlaces = load('commonPlaces', []);
+
+var WD_NAMES = { 0: '周日', 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六' };
+/* 某日期生效的星期几：节假日返回 -1（无固定事项），调休返回指定星期 */
+function effectiveWeekday(dateStr) {
+  if (holidays.indexOf(dateStr) >= 0) return -1;
+  for (var i = 0; i < swaps.length; i++) {
+    if (swaps[i].date === dateStr) return swaps[i].weekday;
+  }
+  var d = parseDate(dateStr);
+  return d ? d.getDay() : -1;
+}
 
 var CATS = {
   homework: { name: '作业', color: '#4f6f9f' },
@@ -652,7 +807,7 @@ function openPage(name) {
 }
 function closePage() {
   document.querySelectorAll('.subpage.open').forEach(function (e) { e.classList.remove('open'); });
-  document.body.style.overflow = '';
+  if (!document.querySelector('.modal-mask.show')) document.body.style.overflow = '';
 }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
@@ -770,7 +925,10 @@ function renderLegend() {
 }
 
 /* ================= 待办事项 ================= */
+var _editTodoId = null;
 function openTodoModal() {
+  _editTodoId = null;
+  document.getElementById('tdModalTitle').textContent = '添加待办事项';
   document.getElementById('tdName').value = '';
   document.getElementById('tdStart').value = todayStr();
   document.getElementById('tdEnd').value = todayStr();
@@ -782,7 +940,23 @@ function openTodoModal() {
   setTimeout(function () { document.getElementById('tdName').focus(); }, 60);
 }
 
-function addTodo() {
+function openTodoEdit(id) {
+  var t = todos.find(function (x) { return x.id === id; });
+  if (!t) return;
+  _editTodoId = id;
+  document.getElementById('tdModalTitle').textContent = '编辑待办事项';
+  document.getElementById('tdName').value = t.name || '';
+  document.getElementById('tdCat').value = t.category || 'task';
+  document.getElementById('tdStart').value = t.startDate || todayStr();
+  document.getElementById('tdEnd').value = t.endDate || t.startDate || todayStr();
+  document.getElementById('tdTimeStart').value = t.startTime || '';
+  document.getElementById('tdTimeEnd').value = t.endTime || '';
+  document.getElementById('tdLoc').value = t.location || '';
+  document.getElementById('tdNotes').value = t.notes || '';
+  openModal('modal-todo');
+}
+
+function saveTodo() {
   var name = document.getElementById('tdName').value.trim();
   var cat = document.getElementById('tdCat').value;
   var s = document.getElementById('tdStart').value;
@@ -794,15 +968,25 @@ function addTodo() {
   if (!parseDate(e)) { alert('请填写截止日期'); return; }
   if (e < s) { alert('截止日期不能早于开始日期'); return; }
   if (ts && te && te < ts) { alert('结束时刻不能早于开始时刻'); return; }
-  todos.push({
-    id: uid(), name: name, category: cat,
+  var fields = {
+    name: name, category: cat,
     startDate: s, endDate: e,
-    startTime: ts, endTime: te,
-    time: '',
+    startTime: ts, endTime: te, time: '',
     location: document.getElementById('tdLoc').value.trim(),
-    notes: document.getElementById('tdNotes').value.trim(),
-    done: false
-  });
+    notes: document.getElementById('tdNotes').value.trim()
+  };
+  if (_editTodoId) {
+    todos = todos.map(function (t) {
+      if (t.id !== _editTodoId) return t;
+      var next = {};
+      for (var k in fields) next[k] = fields[k];
+      return Object.assign({}, t, next);
+    });
+  } else {
+    var item = { id: uid(), done: false };
+    for (var k2 in fields) item[k2] = fields[k2];
+    todos.push(item);
+  }
   save('todos', todos);
   closeModal('modal-todo');
   renderTodos();
@@ -823,9 +1007,12 @@ function renderTodos() {
   });
   var html = items.length ? items.map(function (t) {
     var c = CATS[t.category] || CATS.task;
+    var d = parseDate(t.startDate);
+    var dLabel = d ? (d.getMonth() + 1) + '/' + d.getDate() : '--';
     var range = t.startDate === t.endDate ? fmtDate(t.startDate) : fmtDate(t.startDate) + ' — ' + fmtDate(t.endDate);
     var tm = timeRangeText(t.startTime, t.endTime) || t.time || '';
     return '<div class="item todo-item" style="border-left:3px solid ' + c.color + '">' +
+      '<div class="time-col">' + dLabel + '</div>' +
       '<div class="item-main">' +
         '<div class="item-title">' + esc(t.name) +
           '<span class="cat-tag" style="color:' + c.color + ';border-color:' + c.color + '">' + c.name + '</span>' +
@@ -836,6 +1023,7 @@ function renderTodos() {
         '</div>' +
         (t.notes ? '<div class="item-notes">备注：' + esc(t.notes) + '</div>' : '') +
       '</div>' +
+      '<button class="edit-btn" title="编辑" onclick="openTodoEdit(\'' + t.id + '\')">✎</button>' +
       '<button class="done-btn" onclick="completeTodo(\'' + t.id + '\')">已完成</button>' +
     '</div>';
   }).join('') : '<div class="empty">暂无待办，点击右上角添加</div>';
@@ -873,7 +1061,7 @@ function saveSchedule() {
   var name = document.getElementById('scName').value.trim();
   var ts = document.getElementById('scTimeStart').value;
   var te = document.getElementById('scTimeEnd').value;
-  if (!ts && !te) { alert('请至少填写开始时间或结束时间'); return; }
+  if (!name) { alert('请填写任务名称'); return; }
   if (ts && te && te < ts) { alert('结束时间不能早于开始时间'); return; }
   var fields = {
     name: name,
@@ -909,26 +1097,61 @@ function completeSchedule(id) {
 }
 
 function renderSchedules() {
-  var items = schedules.filter(function (s) { return !s.done; });
-  items.sort(function (a, b) {
-    return (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '');
+  var el = document.getElementById('scheduleList');
+  var eff = effectiveWeekday(todayStr());
+  var list = [];
+  schedules.forEach(function (s) {
+    if (!s.done) list.push({ one: true, s: s });
   });
-  document.getElementById('scheduleList').innerHTML = items.length ? items.map(function (s) {
-    var tm = timeRangeText(s.startTime, s.endTime) || s.time || '';
-    var title = s.name ? esc(s.name) : (esc(tm) || '未命名安排');
-    var meta = [];
-    if (s.name && tm) meta.push('时间 ' + esc(tm));
-    if (s.location) meta.push('地点 ' + esc(s.location));
-    if (s.notes) meta.push('备注 ' + esc(s.notes));
+  if (eff >= 0) {
+    fixedSchedules.forEach(function (f) {
+      if (f.weekday === eff) list.push({ one: false, f: f });
+    });
+  }
+  /* 有开始时间的按时间先后排前，没填时间的排最后 */
+  list.sort(function (a, b) {
+    var ka = a.one ? (a.s.startTime || a.s.time || '') : (a.f.startTime || '');
+    var kb = b.one ? (b.s.startTime || b.s.time || '') : (b.f.startTime || '');
+    if (!ka && !kb) return 0;
+    if (!ka) return 1;
+    if (!kb) return -1;
+    return ka.localeCompare(kb);
+  });
+  el.innerHTML = list.length ? list.map(function (it) {
+    if (it.one) {
+      var s = it.s;
+      var tm = timeRangeText(s.startTime, s.endTime) || s.time || '';
+      var title = s.name ? esc(s.name) : '未命名安排';
+      var meta = [];
+      if (s.name && tm) meta.push('时间 ' + esc(tm));
+      if (s.location) meta.push('地点 ' + esc(s.location));
+      if (s.notes) meta.push('备注 ' + esc(s.notes));
+      return '<div class="item">' +
+        '<div class="time-col">' + (esc(tm) || '未填') + '</div>' +
+        '<div class="item-main">' +
+          '<div class="item-title">' + title + '</div>' +
+          '<div class="item-meta">' + (meta.join(' · ') || '—') + '</div>' +
+        '</div>' +
+        '<button class="edit-btn" title="编辑" onclick="openScheduleEdit(\'' + s.id + '\')">✎</button>' +
+        '<button class="done-btn" onclick="completeSchedule(\'' + s.id + '\')">已完成</button>' +
+      '</div>';
+    }
+    var f = it.f;
+    var ftm = timeRangeText(f.startTime, f.endTime);
+    var fmeta = [];
+    if (f.location) fmeta.push('地点 ' + esc(f.location));
+    if (f.notes) fmeta.push('备注 ' + esc(f.notes));
     return '<div class="item">' +
+      '<div class="time-col">' + esc(ftm) + '</div>' +
       '<div class="item-main">' +
-        '<div class="item-title">' + title + '</div>' +
-        '<div class="item-meta">' + (meta.join(' · ') || '—') + '</div>' +
+        '<div class="item-title">' + esc(f.name) +
+          '<span class="cat-tag" style="color:var(--red);border-color:var(--red)">每周固定</span>' +
+        '</div>' +
+        '<div class="item-meta">' + (fmeta.join(' · ') || '—') + '</div>' +
       '</div>' +
-      '<button class="btn small ghost" onclick="openScheduleEdit(\'' + s.id + '\')">编辑</button>' +
-      '<button class="done-btn" onclick="completeSchedule(\'' + s.id + '\')">已完成</button>' +
+      '<button class="edit-btn" title="编辑" onclick="openFixedEdit(\'' + f.id + '\')">✎</button>' +
     '</div>';
-  }).join('') : '<div class="empty">暂无安排，点击右上角添加</div>';
+  }).join('') : '<div class="empty">今日暂无安排，点击右上角添加</div>';
 }
 
 /* ================= 学校网站 ================= */
@@ -1348,6 +1571,204 @@ function renderCheckins() {
   }).join('') : '<div class="empty">暂无打卡分组，点击右上角新增</div>';
 }
 
+/* ================= 固定安排（每周循环） ================= */
+var _fixedWeekday = 1, _editFixedId = null;
+function openFixedModal(wd) {
+  _fixedWeekday = wd;
+  _editFixedId = null;
+  document.getElementById('fixedModalTitle').textContent = '添加固定安排 · ' + WD_NAMES[wd];
+  document.getElementById('fName').value = '';
+  document.getElementById('fTimeStart').value = '';
+  document.getElementById('fTimeEnd').value = '';
+  document.getElementById('fLoc').value = '';
+  document.getElementById('fNotes').value = '';
+  openModal('modal-fixed');
+  setTimeout(function () { document.getElementById('fName').focus(); }, 60);
+}
+function openFixedEdit(id) {
+  var f = fixedSchedules.find(function (x) { return x.id === id; });
+  if (!f) return;
+  _fixedWeekday = f.weekday;
+  _editFixedId = id;
+  document.getElementById('fixedModalTitle').textContent = '编辑固定安排 · ' + WD_NAMES[f.weekday];
+  document.getElementById('fName').value = f.name || '';
+  document.getElementById('fTimeStart').value = f.startTime || '';
+  document.getElementById('fTimeEnd').value = f.endTime || '';
+  document.getElementById('fLoc').value = f.location || '';
+  document.getElementById('fNotes').value = f.notes || '';
+  openModal('modal-fixed');
+}
+function saveFixed() {
+  var name = document.getElementById('fName').value.trim();
+  var ts = document.getElementById('fTimeStart').value;
+  var te = document.getElementById('fTimeEnd').value;
+  if (!name) { alert('请填写任务名称'); return; }
+  if (!ts || !te) { alert('固定安排需同时填写开始与结束时间'); return; }
+  if (te < ts) { alert('结束时间不能早于开始时间'); return; }
+  var fields = {
+    weekday: _fixedWeekday, name: name,
+    startTime: ts, endTime: te,
+    location: document.getElementById('fLoc').value.trim(),
+    notes: document.getElementById('fNotes').value.trim()
+  };
+  if (_editFixedId) {
+    fixedSchedules = fixedSchedules.map(function (f) {
+      if (f.id !== _editFixedId) return f;
+      var next = {};
+      for (var k in fields) next[k] = fields[k];
+      return Object.assign({}, f, next);
+    });
+  } else {
+    var item = { id: uid() };
+    for (var k2 in fields) item[k2] = fields[k2];
+    fixedSchedules.push(item);
+  }
+  save('fixedSchedules', fixedSchedules);
+  closeModal('modal-fixed');
+  renderFixedPage();
+  renderSchedules();
+}
+function delFixed(id) {
+  if (!confirm('删除该固定安排？')) return;
+  fixedSchedules = fixedSchedules.filter(function (f) { return f.id !== id; });
+  save('fixedSchedules', fixedSchedules);
+  renderFixedPage();
+  renderSchedules();
+}
+function renderFixedPage() {
+  var wrap = document.getElementById('fixedWeekRows');
+  if (!wrap) return;
+  var order = [1, 2, 3, 4, 5, 6, 0];
+  wrap.innerHTML = order.map(function (wd) {
+    var items = fixedSchedules.filter(function (f) { return f.weekday === wd; });
+    items.sort(function (a, b) { return (a.startTime || '').localeCompare(b.startTime || ''); });
+    var rows = items.map(function (f) {
+      var meta = [];
+      if (f.location) meta.push('地点 ' + esc(f.location));
+      if (f.notes) meta.push('备注 ' + esc(f.notes));
+      return '<div class="item">' +
+        '<div class="time-col">' + esc(timeRangeText(f.startTime, f.endTime)) + '</div>' +
+        '<div class="item-main">' +
+          '<div class="item-title">' + esc(f.name) + '</div>' +
+          (meta.length ? '<div class="item-meta">' + meta.join(' · ') + '</div>' : '') +
+        '</div>' +
+        '<button class="edit-btn" title="编辑" onclick="openFixedEdit(\'' + f.id + '\')">✎</button>' +
+        '<button class="del-x" title="删除" onclick="delFixed(\'' + f.id + '\')">×</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="card section wd-row">' +
+      '<div class="wd-head"><h3>' + WD_NAMES[wd] + '</h3>' +
+        '<button class="btn small" onclick="openFixedModal(' + wd + ')">＋ 添加固定安排</button>' +
+      '</div>' +
+      (rows || '<div class="empty">该日暂无固定安排</div>') +
+    '</div>';
+  }).join('');
+  var hs = document.getElementById('hsLists');
+  var hHtml = holidays.length ? holidays.slice().sort().map(function (dt) {
+    var d = parseDate(dt);
+    return '<span class="hs-chip">' + dt + '（' + (d ? WD_NAMES[d.getDay()] : '') + '）' +
+      '<button class="del-x" onclick="delHoliday(\'' + dt + '\')">×</button></span>';
+  }).join('') : '<span class="cnt">暂无节假日</span>';
+  var sHtml = swaps.length ? swaps.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).map(function (sw) {
+    return '<span class="hs-chip">' + sw.date + ' → 按' + WD_NAMES[sw.weekday] +
+      '<button class="del-x" onclick="delSwap(\'' + sw.id + '\')">×</button></span>';
+  }).join('') : '<span class="cnt">暂无调休</span>';
+  hs.innerHTML =
+    '<div class="hs-block"><span class="cnt">节假日（当天固定安排不显示）：</span>' + hHtml + '</div>' +
+    '<div class="hs-block"><span class="cnt">调休（按指定星期几执行）：</span>' + sHtml + '</div>';
+}
+function addHoliday() {
+  var v = document.getElementById('holiDate').value;
+  if (!parseDate(v)) { alert('请选择日期'); return; }
+  if (holidays.indexOf(v) >= 0) { alert('该日期已添加为节假日'); return; }
+  holidays.push(v);
+  holidays.sort();
+  save('holidays', holidays);
+  closeModal('modal-holiday');
+  renderFixedPage();
+  renderSchedules();
+}
+function delHoliday(dt) {
+  if (!confirm('删除节假日 ' + dt + ' ？')) return;
+  holidays = holidays.filter(function (x) { return x !== dt; });
+  save('holidays', holidays);
+  renderFixedPage();
+  renderSchedules();
+}
+function addSwap() {
+  var v = document.getElementById('swapDate').value;
+  var wd = parseInt(document.getElementById('swapWD').value, 10);
+  if (!parseDate(v)) { alert('请选择日期'); return; }
+  swaps = swaps.filter(function (x) { return x.date !== v; });
+  swaps.push({ id: uid(), date: v, weekday: wd });
+  swaps.sort(function (a, b) { return a.date.localeCompare(b.date); });
+  save('swaps', swaps);
+  closeModal('modal-swap');
+  renderFixedPage();
+  renderSchedules();
+}
+function delSwap(id) {
+  if (!confirm('删除该条调休规则？')) return;
+  swaps = swaps.filter(function (x) { return x.id !== id; });
+  save('swaps', swaps);
+  renderFixedPage();
+  renderSchedules();
+}
+
+/* 常用任务名称 / 常用地点（安排与待办共用同一套数据，仅回填目标输入框不同） */
+var _commonType = 'name', _commonTarget = null, _commonReturn = null;
+function openCommon(type, targetId, returnTo) {
+  _commonType = type;
+  _commonTarget = targetId || (type === 'name' ? 'scName' : 'scLoc');
+  _commonReturn = returnTo || null;
+  document.getElementById('commonTitle').textContent = type === 'name' ? '常用任务名称' : '常用地点';
+  document.getElementById('commonInput').value = '';
+  renderCommonList();
+  openPage('common');
+}
+function renderCommonList() {
+  var arr = _commonType === 'name' ? commonNames : commonPlaces;
+  var el = document.getElementById('commonList');
+  el.innerHTML = arr.length ? arr.map(function (v, i) {
+    return '<div class="item">' +
+      '<div class="item-main"><div class="item-title" style="cursor:pointer" onclick="pickCommonIndex(' + i + ')">' + esc(v) + '</div></div>' +
+      '<button class="btn small ghost" onclick="pickCommonIndex(' + i + ')">＋ 填入</button>' +
+      '<button class="del-x" title="删除" onclick="delCommon(' + i + ')">×</button>' +
+    '</div>';
+  }).join('') : '<div class="empty">暂无常用' + (_commonType === 'name' ? '任务名称' : '地点') + '，可在上方添加</div>';
+}
+function pickCommonIndex(i) {
+  var arr = _commonType === 'name' ? commonNames : commonPlaces;
+  var v = arr[i];
+  if (v == null) return;
+  var target = document.getElementById(_commonTarget || (_commonType === 'name' ? 'scName' : 'scLoc'));
+  if (target) target.value = v;
+  closePage();
+  if (_commonReturn) { openModal(_commonReturn); _commonReturn = null; }
+}
+function addCommon() {
+  var inp = document.getElementById('commonInput');
+  var v = inp.value.trim();
+  if (!v) { alert('请输入内容'); return; }
+  var arr = _commonType === 'name' ? commonNames : commonPlaces;
+  if (arr.indexOf(v) >= 0) { alert('该常用项已存在'); return; }
+  arr.push(v);
+  save(_commonType === 'name' ? 'commonNames' : 'commonPlaces', arr);
+  inp.value = '';
+  renderCommonList();
+}
+function delCommon(i) {
+  if (!confirm('删除该常用项？')) return;
+  if (_commonType === 'name') {
+    commonNames = commonNames.filter(function (x, j) { return j !== i; });
+    save('commonNames', commonNames);
+  } else {
+    commonPlaces = commonPlaces.filter(function (x, j) { return j !== i; });
+    save('commonPlaces', commonPlaces);
+  }
+  renderCommonList();
+}
+
 /* ================= 图片读取与压缩 ================= */
 function readImage(file, cb) {
   var rd = new FileReader();
@@ -1385,7 +1806,9 @@ function exportData() {
     data: {
       todos: todos, schedules: schedules, sites: sites,
       courseSections: courseSections, noteSections: noteSections,
-      bills: bills, checkinGroups: checkinGroups
+      bills: bills, checkinGroups: checkinGroups,
+      fixedSchedules: fixedSchedules, holidays: holidays, swaps: swaps,
+      commonNames: commonNames, commonPlaces: commonPlaces
     }
   };
   var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1416,9 +1839,16 @@ function importHandler(e) {
     noteSections   = Array.isArray(d.noteSections) ? d.noteSections : [];
     bills          = Array.isArray(d.bills) ? d.bills : [];
     checkinGroups  = Array.isArray(d.checkinGroups) ? d.checkinGroups : [];
+    fixedSchedules = Array.isArray(d.fixedSchedules) ? d.fixedSchedules : [];
+    holidays       = Array.isArray(d.holidays) ? d.holidays : [];
+    swaps          = Array.isArray(d.swaps) ? d.swaps : [];
+    commonNames    = Array.isArray(d.commonNames) ? d.commonNames : [];
+    commonPlaces   = Array.isArray(d.commonPlaces) ? d.commonPlaces : [];
     save('todos', todos); save('schedules', schedules); save('sites', sites);
     save('courseSections', courseSections); save('noteSections', noteSections);
     save('bills', bills); save('checkinGroups', checkinGroups);
+    save('fixedSchedules', fixedSchedules); save('holidays', holidays); save('swaps', swaps);
+    save('commonNames', commonNames); save('commonPlaces', commonPlaces);
     renderAll();
     alert('导入成功，数据已恢复');
   };
@@ -1438,6 +1868,7 @@ function renderAll() {
   renderNotes();
   renderBills();
   renderCheckins();
+  renderFixedPage();
   var hm = document.getElementById('histMonth');
   if (!hm.value) hm.value = todayStr().slice(0, 7);
   renderHistory();
