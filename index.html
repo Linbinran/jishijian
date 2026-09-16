@@ -705,20 +705,6 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
   </div>
 </div>
 
-<!-- ============ 弹窗：添加链接（课程事宜 / 课程笔记共用） ============ -->
-<div class="modal-mask" id="modal-link" onclick="maskClose(event,'modal-link')">
-  <div class="modal" style="width:min(420px,92vw)">
-    <h3>添加链接</h3>
-    <div class="field"><label>链接名称（选填）</label><input class="inp" id="lkName" placeholder="如：第三章课件 Word 文档"></div>
-    <div class="field"><label>网址 *</label><input class="inp" id="lkUrl" placeholder="https://…（网盘 / 文档分享链接等）"></div>
-    <div class="hint">保存后点击该链接会在新标签页打开对应网址，例如网盘分享的 Word 文档。未填协议时会自动补 https://。</div>
-    <div class="modal-actions">
-      <button class="btn ghost" onclick="closeModal('modal-link')">取消</button>
-      <button class="btn primary" onclick="saveLink()">保存</button>
-    </div>
-  </div>
-</div>
-
 <!-- ============ 弹窗：新增打卡项 ============ -->
 <div class="modal-mask" id="modal-checkitem" onclick="maskClose(event,'modal-checkitem')">
   <div class="modal" style="width:min(420px,92vw)">
@@ -1530,44 +1516,10 @@ function renderSites() {
   }).join('') : '<div class="empty">暂无网站，可在上方添加</div>';
 }
 
-/* ================= 链接（课程事宜 / 课程笔记共用） ================= */
-/* 注意：严格模式下状态变量必须显式 var 声明 */
-var _linkKind = '';   /* 'course' | 'note' */
-var _linkSecId = '';
-
-function normalizeUrl(u) {
-  u = (u || '').trim();
-  if (!u) return '';
-  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
-  return u;
-}
+/* ================= 链接（课程事宜 / 课程笔记） =================
+   「添加链接」弹窗已移除：网址直接写在文字笔记里即可自动变蓝可点（见 linkifyText）。
+   以下仅保留旧数据的展示与删除（此前通过弹窗添加的链接条目仍正常显示）。 */
 function linkLabel(l) { return l.lname || l.url; }
-function openLinkModal(kind, secId) {
-  _linkKind = kind;
-  _linkSecId = secId || '';
-  document.getElementById('lkName').value = '';
-  document.getElementById('lkUrl').value = '';
-  openModal('modal-link');
-  setTimeout(function () { document.getElementById('lkUrl').focus(); }, 60);
-}
-function saveLink() {
-  var url = normalizeUrl(document.getElementById('lkUrl').value);
-  var name = document.getElementById('lkName').value.trim();
-  if (!url || url === 'https://') { alert('请填写网址'); return; }
-  var sec = (_linkKind === 'course' ? courseSections : noteSections)
-    .find(function (x) { return x.id === _linkSecId; });
-  if (!sec) { closeModal('modal-link'); return; }
-  if (_linkKind === 'course') {
-    sec.links = sec.links || [];
-    sec.links.push({ id: uid(), lname: name, url: url });
-    if (save('courseSections', courseSections)) renderCourses();
-  } else {
-    sec.items = sec.items || [];
-    sec.items.push({ id: uid(), type: 'link', lname: name, content: url });
-    if (save('noteSections', noteSections)) renderNotes();
-  }
-  closeModal('modal-link');
-}
 function delCourseLink(secId, linkId) {
   var s = courseSections.find(function (x) { return x.id === secId; });
   if (!s || !s.links) return;
@@ -1795,7 +1747,6 @@ function renderCourses() {
       '</div>' +
       '<div class="row-btns">' +
         '<label class="btn small">上传图片<input type="file" accept="image/*" multiple hidden onchange="addCourseImages(\'' + s.id + '\', this)"></label>' +
-        '<button class="btn small" onclick="openLinkModal(\'course\',\'' + s.id + '\')">添加链接</button>' +
         '<span class="cnt">' + (s.images || []).length + ' 张图片</span>' +
       '</div>' +
       (s.links && s.links.length ? s.links.map(function (l) {
@@ -1934,7 +1885,6 @@ function renderNotes() {
         '<button class="btn small" onclick="addNoteText(\'' + s.id + '\')">写文字笔记</button>' +
         '<label class="btn small">上传图片<input type="file" accept="image/*" multiple hidden onchange="addNoteImages(\'' + s.id + '\', this)"></label>' +
         '<label class="btn small">上传文件<input type="file" multiple hidden onchange="addNoteFiles(\'' + s.id + '\', this)"></label>' +
-        '<button class="btn small" onclick="openLinkModal(\'note\',\'' + s.id + '\')">添加链接</button>' +
       '</div>' +
       (itemsHtml || '<div class="empty">暂无内容，可用上方按钮添加</div>') +
     '</div>';
