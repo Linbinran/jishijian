@@ -287,6 +287,25 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
 .img-del:hover{background:#3a1216}
 .note-text-item{margin-bottom:10px;display:flex;gap:8px;align-items:flex-start}
 .note-text-item .note-area{flex:1}
+/* 笔记视图态：点击进入编辑；网址自动转为蓝色可点链接 */
+.note-box{
+  flex:1;cursor:text;min-height:100px;padding:10px;background:var(--panel2);
+  border:1px dashed var(--line);border-radius:8px;color:var(--txt);
+  font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word;
+}
+.note-box.sm{min-height:64px}
+.note-ph{color:var(--sub);opacity:.75}
+.txt-link{color:#3f6fae;text-decoration:underline;word-break:break-all}
+/* 长按拖拽排序：被拖条目悬浮放大，其余条目 transform 平滑让位 */
+#commonList .item, #checkinList .check-item{
+  transition:transform .2s ease;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+.drag-sorting{
+  transition:none !important;
+  box-shadow:0 10px 24px rgba(66,55,42,.25);
+  cursor:grabbing;
+}
 .file-item{
   display:flex;align-items:center;gap:10px;background:var(--panel2);
   border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-bottom:8px;
@@ -686,6 +705,20 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
   </div>
 </div>
 
+<!-- ============ 弹窗：添加链接（课程事宜 / 课程笔记共用） ============ -->
+<div class="modal-mask" id="modal-link" onclick="maskClose(event,'modal-link')">
+  <div class="modal" style="width:min(420px,92vw)">
+    <h3>添加链接</h3>
+    <div class="field"><label>链接名称（选填）</label><input class="inp" id="lkName" placeholder="如：第三章课件 Word 文档"></div>
+    <div class="field"><label>网址 *</label><input class="inp" id="lkUrl" placeholder="https://…（网盘 / 文档分享链接等）"></div>
+    <div class="hint">保存后点击该链接会在新标签页打开对应网址，例如网盘分享的 Word 文档。未填协议时会自动补 https://。</div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeModal('modal-link')">取消</button>
+      <button class="btn primary" onclick="saveLink()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ 弹窗：新增打卡项 ============ -->
 <div class="modal-mask" id="modal-checkitem" onclick="maskClose(event,'modal-checkitem')">
   <div class="modal" style="width:min(420px,92vw)">
@@ -717,8 +750,8 @@ input[type=date].inp,input[type=time].inp,input[type=month].inp{color-scheme:lig
       </select>
     </div>
     <div class="field-row">
-      <div class="field"><label>开始时间 *</label><input type="time" class="inp" id="fTimeStart"></div>
-      <div class="field"><label>结束时间 *</label><input type="time" class="inp" id="fTimeEnd"></div>
+      <div class="field"><label>开始时间（选填）</label><input type="time" class="inp" id="fTimeStart"></div>
+      <div class="field"><label>结束时间（选填）</label><input type="time" class="inp" id="fTimeEnd"></div>
     </div>
     <div class="field"><label>地点（选填）</label><input class="inp" id="fLoc" placeholder="如：教学楼 A201"></div>
     <div class="field"><label>备注（选填）</label><textarea class="inp" id="fNotes" rows="2"></textarea></div>
@@ -787,6 +820,21 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
+}
+/* 把文本中的网址（http(s):// 或 www. 开头）转为蓝色可点击链接，其余内容照常转义 */
+function linkifyText(t) {
+  var s = String(t == null ? '' : t);
+  var out = '', last = 0, m;
+  var re = /((?:https?:\/\/|www\.)[^\s<>"'，。；！？：、]+)/gi;
+  while ((m = re.exec(s))) {
+    out += esc(s.slice(last, m.index));
+    var url = m[0];
+    var href = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+    out += '<a class="txt-link" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>';
+    last = m.index + url.length;
+  }
+  out += esc(s.slice(last));
+  return out;
 }
 function pad(n) { return n < 10 ? '0' + n : String(n); }
 function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
@@ -1444,7 +1492,7 @@ function renderSchedules() {
     if (f.location) fmeta.push('地点 ' + esc(f.location));
     if (f.notes) fmeta.push('备注 ' + esc(f.notes));
     return '<div class="item">' +
-      '<div class="time-col">' + esc(ftm) + '</div>' +
+      '<div class="time-col">' + (esc(ftm) || '未填') + '</div>' +
       '<div class="item-main">' +
         '<div class="item-title">' + esc(f.name) + '</div>' +
         '<div class="item-meta">' + (fmeta.join(' · ') || '—') + '</div>' +
@@ -1480,6 +1528,216 @@ function renderSites() {
       '<button class="del-x" title="删除" onclick="delSite(\'' + s.id + '\')">×</button>' +
     '</div>';
   }).join('') : '<div class="empty">暂无网站，可在上方添加</div>';
+}
+
+/* ================= 链接（课程事宜 / 课程笔记共用） ================= */
+/* 注意：严格模式下状态变量必须显式 var 声明 */
+var _linkKind = '';   /* 'course' | 'note' */
+var _linkSecId = '';
+
+function normalizeUrl(u) {
+  u = (u || '').trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  return u;
+}
+function linkLabel(l) { return l.lname || l.url; }
+function openLinkModal(kind, secId) {
+  _linkKind = kind;
+  _linkSecId = secId || '';
+  document.getElementById('lkName').value = '';
+  document.getElementById('lkUrl').value = '';
+  openModal('modal-link');
+  setTimeout(function () { document.getElementById('lkUrl').focus(); }, 60);
+}
+function saveLink() {
+  var url = normalizeUrl(document.getElementById('lkUrl').value);
+  var name = document.getElementById('lkName').value.trim();
+  if (!url || url === 'https://') { alert('请填写网址'); return; }
+  var sec = (_linkKind === 'course' ? courseSections : noteSections)
+    .find(function (x) { return x.id === _linkSecId; });
+  if (!sec) { closeModal('modal-link'); return; }
+  if (_linkKind === 'course') {
+    sec.links = sec.links || [];
+    sec.links.push({ id: uid(), lname: name, url: url });
+    if (save('courseSections', courseSections)) renderCourses();
+  } else {
+    sec.items = sec.items || [];
+    sec.items.push({ id: uid(), type: 'link', lname: name, content: url });
+    if (save('noteSections', noteSections)) renderNotes();
+  }
+  closeModal('modal-link');
+}
+function delCourseLink(secId, linkId) {
+  var s = courseSections.find(function (x) { return x.id === secId; });
+  if (!s || !s.links) return;
+  if (!confirm('删除该链接？')) return;
+  s.links = s.links.filter(function (x) { return x.id !== linkId; });
+  if (save('courseSections', courseSections)) renderCourses();
+}
+
+/* ================= 笔记：视图 / 编辑 双态（网址自动高亮可点） ================= */
+/* 视图态显示 linkifyText 结果（网址蓝色可跳转），点击进入 textarea 编辑，失焦自动保存并回到视图态 */
+function noteBoxEdit(box) {
+  if (!box || box.querySelector('textarea')) return;
+  var kind = box.getAttribute('data-kind');
+  var secId = box.getAttribute('data-sec');
+  var itemId = box.getAttribute('data-item');
+  var val = '';
+  if (kind === 'course') {
+    var s = courseSections.find(function (x) { return x.id === secId; });
+    val = s ? (s.text || '') : '';
+  } else {
+    var sn = noteSections.find(function (x) { return x.id === secId; });
+    var it = sn ? sn.items.find(function (x) { return x.id === itemId; }) : null;
+    val = it ? (it.content || '') : '';
+  }
+  box.innerHTML = '<textarea class="note-area" placeholder="输入文字笔记，粘贴网址（http(s):// 或 www. 开头）后即可点击跳转...">' + esc(val) + '</textarea>';
+  var ta = box.querySelector('textarea');
+  ta.focus();
+  if (ta.setSelectionRange && val.length) { try { ta.setSelectionRange(val.length, val.length); } catch (err) {} }
+  ta.addEventListener('input', function () {
+    if (kind === 'course') courseTextChange(secId, ta.value);
+    else noteTextChange(secId, itemId, ta.value);
+  });
+  ta.addEventListener('blur', function () { noteBoxCommit(box, ta.value); });
+}
+function noteBoxCommit(box, val) {
+  var kind = box.getAttribute('data-kind');
+  var secId = box.getAttribute('data-sec');
+  var itemId = box.getAttribute('data-item');
+  if (kind === 'course') {
+    var s = courseSections.find(function (x) { return x.id === secId; });
+    if (s) s.text = val;
+    clearTimeout(_ctTimer);
+    save('courseSections', courseSections);
+  } else {
+    var sn = noteSections.find(function (x) { return x.id === secId; });
+    var it = sn ? sn.items.find(function (x) { return x.id === itemId; }) : null;
+    if (it) it.content = val;
+    clearTimeout(_ntTimer);
+    save('noteSections', noteSections);
+  }
+  box.innerHTML = val ? linkifyText(val) : '<span class="note-ph">点击输入文字笔记，粘贴网址后可直接点击跳转...</span>';
+}
+/* 事件委托：点击笔记框进入编辑；点击框内的蓝色链接则正常跳转、不进入编辑 */
+document.addEventListener('click', function (e) {
+  if (!e.target || !e.target.closest) return;
+  if (e.target.closest('a.txt-link')) return;
+  var box = e.target.closest('.note-box');
+  if (box) noteBoxEdit(box);
+});
+
+/* ================= 长按拖拽排序（通用） =================
+   用法：setupDragSort(容器元素, 条目类名, function(被拖条目, 新插入位置){ 重排数据并保存渲染 })
+   交互：长按 320ms 触发 → 条目放大 1.04 + 阴影悬浮 → 拖动时其余条目按目标位平滑让位
+        （transform 过渡动画）→ 松手落位，回调重排数据。兼容鼠标与触屏。 */
+var _dsActive = null, _dsSuppressClick = false;
+function moveArr(arr, from, to) {
+  var v = arr.splice(from, 1)[0];
+  arr.splice(Math.max(0, Math.min(arr.length, to)), 0, v);
+}
+function setupDragSort(el, cls, onReorder) {
+  if (!el) return;
+  var press = null, sx = 0, sy = 0;
+  function inItem(t) {
+    while (t && t !== el) {
+      if (t.classList && t.classList.contains(cls)) return t;
+      t = t.parentNode;
+    }
+    return null;
+  }
+  function badTarget(t) {
+    while (t && t !== el) {
+      var tag = (t.tagName || '').toLowerCase();
+      if (tag === 'button' || tag === 'a' || tag === 'label' || tag === 'input' || tag === 'textarea') return true;
+      t = t.parentNode;
+    }
+    return false;
+  }
+  function start(e, x, y) {
+    if (_dsActive || press) return;
+    var t = e.target, item = inItem(t);
+    if (!item || badTarget(t)) return;
+    e.preventDefault();          /* 防止拖动时选中文字 */
+    sx = x; sy = y;
+    press = setTimeout(function () { press = null; activate(item, y); }, 320);
+  }
+  function activate(item, y) {
+    var scope = item.parentNode;  /* 条目仅在同一父容器内参与排序（如单个打卡分组） */
+    var items = Array.prototype.slice.call(scope.getElementsByClassName(cls));
+    var i = items.indexOf(item);
+    if (i < 0 || items.length < 2) return;
+    _dsActive = {
+      owner: el,                  /* 标记归属：多个容器都监听了 document 事件，只处理自己的拖拽 */
+      item: item, items: items, i: i, target: i, y0: y,
+      tops: items.map(function (n) { return n.offsetTop; }),
+      hts: items.map(function (n) { return n.offsetHeight; })
+    };
+    item.classList.add('drag-sorting');
+    layout(0);
+  }
+  function calcTarget(st, delta) {
+    var c = st.tops[st.i] + st.hts[st.i] / 2 + delta, t = 0;
+    for (var k = 0; k < st.items.length; k++) {
+      if (k === st.i) continue;
+      if (st.tops[k] + st.hts[k] / 2 < c) t++;
+    }
+    return t;
+  }
+  function layout(delta) {
+    var st = _dsActive;
+    st.item.style.transform = 'translateY(' + delta + 'px) scale(1.04)';
+    var others = [];
+    for (var k = 0; k < st.items.length; k++) if (k !== st.i) others.push(k);
+    var tt = Math.max(0, Math.min(others.length, st.target));
+    /* 被拖条目跨越了哪些条目，哪些就让位一个身位（±被拖条目高度），margin 间距随条目一起走 */
+    for (var k2 = 0; k2 < st.items.length; k2++) {
+      if (k2 === st.i) continue;
+      var sh = 0;
+      if (tt < st.i && k2 >= tt && k2 < st.i) sh = st.hts[st.i];
+      else if (tt > st.i && k2 > st.i && k2 <= tt) sh = -st.hts[st.i];
+      st.items[k2].style.transform = sh ? 'translateY(' + sh + 'px)' : '';
+    }
+  }
+  function onMove(e) {
+    if (_dsActive && _dsActive.owner !== el) return;
+    var t0 = e.touches && e.touches.length ? e.touches[0] : null;
+    var y = t0 ? t0.clientY : e.clientY;
+    var x = t0 ? t0.clientX : e.clientX;
+    if (!_dsActive) {
+      if (press && (Math.abs(y - sy) > 10 || Math.abs(x - sx) > 10)) { clearTimeout(press); press = null; }
+      return;
+    }
+    if (e.cancelable) e.preventDefault();  /* 拖拽中阻止页面滚动 */
+    var st = _dsActive;
+    st.target = calcTarget(st, y - st.y0);
+    layout(y - st.y0);
+  }
+  function onUp() {
+    if (!_dsActive || _dsActive.owner !== el) return;
+    var st = _dsActive; _dsActive = null;
+    st.item.classList.remove('drag-sorting');
+    for (var k = 0; k < st.items.length; k++) st.items[k].style.transform = '';
+    if (st.target !== st.i) {
+      _dsSuppressClick = true;   /* 拖完抑制紧跟的 click，避免误触条目按钮 */
+      setTimeout(function () { _dsSuppressClick = false; }, 350);
+      onReorder(st.item, st.target);
+    }
+  }
+  el.addEventListener('mousedown', function (e) { start(e, e.clientX, e.clientY); });
+  el.addEventListener('touchstart', function (e) {
+    if (e.touches && e.touches.length) start(e, e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+  el.addEventListener('contextmenu', function (e) { if (_dsActive) e.preventDefault(); });
+  el.addEventListener('click', function (e) {
+    if (_dsSuppressClick) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onUp);
+  document.addEventListener('touchcancel', onUp);
 }
 
 /* ================= 课程事宜 ================= */
@@ -1532,11 +1790,20 @@ function renderCourses() {
       '<div class="section-head"><h3>' + esc(s.name) + '</h3>' +
         '<div class="head-btns"><button class="btn small danger" onclick="delCourse(\'' + s.id + '\')">删除</button></div>' +
       '</div>' +
-      '<textarea class="note-area" placeholder="在此编辑本课程文字笔记，自动保存..." oninput="courseTextChange(\'' + s.id + '\', this.value)">' + esc(s.text || '') + '</textarea>' +
+      '<div class="note-box" data-kind="course" data-sec="' + s.id + '" data-item="">' +
+        (s.text ? linkifyText(s.text) : '<span class="note-ph">点击输入文字笔记，粘贴网址后可直接点击跳转...</span>') +
+      '</div>' +
       '<div class="row-btns">' +
         '<label class="btn small">上传图片<input type="file" accept="image/*" multiple hidden onchange="addCourseImages(\'' + s.id + '\', this)"></label>' +
+        '<button class="btn small" onclick="openLinkModal(\'course\',\'' + s.id + '\')">添加链接</button>' +
         '<span class="cnt">' + (s.images || []).length + ' 张图片</span>' +
       '</div>' +
+      (s.links && s.links.length ? s.links.map(function (l) {
+        return '<div class="file-item">' +
+          '<a class="file-link" href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer">' + esc(linkLabel(l)) + ' ↗</a>' +
+          '<button class="del-x" title="删除" onclick="delCourseLink(\'' + s.id + '\', \'' + l.id + '\')">×</button>' +
+        '</div>';
+      }).join('') : '') +
       '<div class="img-grid">' + (s.images || []).map(function (img, i) {
         return '<div class="img-cell">' +
           '<img src="' + img + '" alt="" onclick="previewCourseImg(\'' + s.id + '\',' + i + ')">' +
@@ -1635,7 +1902,9 @@ function renderNotes() {
     var itemsHtml = (s.items || []).map(function (it) {
       if (it.type === 'text') {
         return '<div class="note-text-item">' +
-          '<textarea class="note-area sm" placeholder="文字笔记，自动保存..." oninput="noteTextChange(\'' + s.id + '\', \'' + it.id + '\', this.value)">' + esc(it.content) + '</textarea>' +
+          '<div class="note-box sm" data-kind="note" data-sec="' + s.id + '" data-item="' + it.id + '">' +
+            (it.content ? linkifyText(it.content) : '<span class="note-ph">点击输入文字笔记，粘贴网址后可直接点击跳转...</span>') +
+          '</div>' +
           '<button class="del-x" title="删除" onclick="delNoteItem(\'' + s.id + '\', \'' + it.id + '\')">×</button>' +
         '</div>';
       }
@@ -1643,6 +1912,12 @@ function renderNotes() {
         return '<div class="img-cell" style="max-width:120px">' +
           '<img src="' + it.content + '" alt="" onclick="previewNoteImg(\'' + s.id + '\', \'' + it.id + '\')">' +
           '<button class="img-del" onclick="delNoteItem(\'' + s.id + '\', \'' + it.id + '\')">×</button>' +
+        '</div>';
+      }
+      if (it.type === 'link') {
+        return '<div class="file-item">' +
+          '<a class="file-link" href="' + esc(it.content) + '" target="_blank" rel="noopener noreferrer">' + esc(it.lname || it.content) + ' ↗</a>' +
+          '<button class="del-x" title="删除" onclick="delNoteItem(\'' + s.id + '\', \'' + it.id + '\')">×</button>' +
         '</div>';
       }
       return '<div class="file-item">' +
@@ -1659,6 +1934,7 @@ function renderNotes() {
         '<button class="btn small" onclick="addNoteText(\'' + s.id + '\')">写文字笔记</button>' +
         '<label class="btn small">上传图片<input type="file" accept="image/*" multiple hidden onchange="addNoteImages(\'' + s.id + '\', this)"></label>' +
         '<label class="btn small">上传文件<input type="file" multiple hidden onchange="addNoteFiles(\'' + s.id + '\', this)"></label>' +
+        '<button class="btn small" onclick="openLinkModal(\'note\',\'' + s.id + '\')">添加链接</button>' +
       '</div>' +
       (itemsHtml || '<div class="empty">暂无内容，可用上方按钮添加</div>') +
     '</div>';
@@ -1848,7 +2124,7 @@ function renderCheckins() {
       var modeTag = it.mode === 'daily'
         ? '<span class="mode-tag daily">每日</span>'
         : '<span class="mode-tag once">单次</span>';
-      return '<div class="item check-item' + (it.done ? ' is-done' : '') + '">' +
+      return '<div class="item check-item' + (it.done ? ' is-done' : '') + '" data-gid="' + g.id + '" data-iid="' + it.id + '">' +
         '<button class="del-x" title="删除打卡项" onclick="delCheckItem(\'' + g.id + '\', \'' + it.id + '\')">×</button>' +
         '<div class="item-main"><div class="item-title">' + esc(it.name) + modeTag + '</div></div>' +
         '<button class="done-btn' + (it.done ? ' filled' : '') + '" onclick="toggleCheck(\'' + g.id + '\', \'' + it.id + '\')">' +
@@ -1905,8 +2181,8 @@ function saveFixed() {
   var ts = document.getElementById('fTimeStart').value;
   var te = document.getElementById('fTimeEnd').value;
   if (!name) { alert('请填写任务名称'); return; }
-  if (!ts || !te) { alert('固定安排需同时填写开始与结束时间'); return; }
-  if (te < ts) { alert('结束时间不能早于开始时间'); return; }
+  /* 时间改为选填：都填才校验先后；只填一边或不填均允许，展示与排序逻辑同普通今日安排 */
+  if (ts && te && te < ts) { alert('结束时间不能早于开始时间'); return; }
   var fields = {
     weekday: _fixedWeekday,
     weekMode: document.getElementById('fWeekMode').value || 'all',
@@ -1952,7 +2228,14 @@ function renderFixedPage() {
   var order = [1, 2, 3, 4, 5, 6, 0];
   wrap.innerHTML = order.map(function (wd) {
     var items = fixedSchedules.filter(function (f) { return f.weekday === wd; });
-    items.sort(function (a, b) { return (a.startTime || '').localeCompare(b.startTime || ''); });
+    /* 有开始时间的排前，未填时间的排最后 */
+    items.sort(function (a, b) {
+      var ka = a.startTime || '', kb = b.startTime || '';
+      if (!ka && !kb) return 0;
+      if (!ka) return 1;
+      if (!kb) return -1;
+      return ka.localeCompare(kb);
+    });
     var rows = items.map(function (f) {
       var meta = [];
       if (f.weekMode && f.weekMode !== 'all') meta.push('周次 ' + weekModeText(f.weekMode));
@@ -1961,7 +2244,7 @@ function renderFixedPage() {
       var wmTag = f.weekMode === 'odd' ? '<span class="cat-tag" style="color:#4f6f9f;border-color:#4f6f9f">单周</span>'
         : f.weekMode === 'even' ? '<span class="cat-tag" style="color:#8a5f9e;border-color:#8a5f9e">双周</span>' : '';
       return '<div class="item">' +
-        '<div class="time-col">' + esc(timeRangeText(f.startTime, f.endTime)) + '</div>' +
+        '<div class="time-col">' + (esc(timeRangeText(f.startTime, f.endTime)) || '未填') + '</div>' +
         '<div class="item-main">' +
           '<div class="item-title">' + esc(f.name) + wmTag + '</div>' +
           (meta.length ? '<div class="item-meta">' + meta.join(' · ') + '</div>' : '') +
@@ -2060,7 +2343,7 @@ function renderCommonList() {
   var arr = _commonType === 'name' ? commonNames : commonPlaces;
   var el = document.getElementById('commonList');
   el.innerHTML = arr.length ? arr.map(function (v, i) {
-    return '<div class="item">' +
+    return '<div class="item" data-idx="' + i + '">' +
       '<div class="item-main"><div class="item-title" style="cursor:pointer" onclick="pickCommonIndex(' + i + ')">' + esc(v) + '</div></div>' +
       '<button class="btn small ghost" onclick="pickCommonIndex(' + i + ')">＋ 填入</button>' +
       '<button class="del-x" title="删除" onclick="delCommon(' + i + ')">×</button>' +
@@ -2209,6 +2492,28 @@ function renderAll() {
 (function init() {
   renderAll();
   tlToday();
+  /* 长按拖拽排序：常用项（任务名称/地点共用一个列表）与打卡项 */
+  setupDragSort(document.getElementById('commonList'), 'item', function (itemEl, to) {
+    var isName = _commonType === 'name';
+    var arr = isName ? commonNames : commonPlaces;
+    var from = parseInt(itemEl.getAttribute('data-idx'), 10);
+    if (isNaN(from)) return;
+    moveArr(arr, from, to);
+    save(isName ? 'commonNames' : 'commonPlaces', arr);
+    renderCommonList();
+  });
+  setupDragSort(document.getElementById('checkinList'), 'check-item', function (itemEl, to) {
+    var gid = itemEl.getAttribute('data-gid');
+    var iid = itemEl.getAttribute('data-iid');
+    var g = checkinGroups.find(function (x) { return x.id === gid; });
+    if (!g) return;
+    var from = -1;
+    for (var k = 0; k < g.items.length; k++) if (g.items[k].id === iid) { from = k; break; }
+    if (from < 0) return;
+    moveArr(g.items, from, to);
+    save('checkinGroups', checkinGroups);
+    renderCheckins();
+  });
   document.getElementById('importFile').addEventListener('change', importHandler);
   document.getElementById('askInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') askOk();
@@ -2223,11 +2528,65 @@ function renderAll() {
 </script>
 <!-- PWA：Service Worker 注册（仅用于安装与离线缓存，不影响页面业务逻辑） -->
 <script>
+/* ===== PWA：Service Worker 注册 + 安装引导（纯 PWA 附加代码，不含业务逻辑） ===== */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('./sw.js').catch(function () {});
   });
 }
+/* 安装引导：浏览器判定满足安装条件时触发 beforeinstallprompt，
+   弹出底部「安装济时笺」提示条；点击「安装」调用原生安装弹窗；
+   已在 standalone 模式（已安装）则不再显示。样式为内联注入，不改动原有布局。 */
+(function () {
+  try {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return;
+    if (window.navigator && window.navigator.standalone === true) return; /* iOS 已添加到主屏 */
+    var deferred = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferred = e;
+      showBar();
+    });
+    window.addEventListener('appinstalled', function () {
+      var b = document.getElementById('pwaInstallBar');
+      if (b) b.remove();
+      deferred = null;
+    });
+    function showBar() {
+      if (document.getElementById('pwaInstallBar')) return;
+      var bar = document.createElement('div');
+      bar.id = 'pwaInstallBar';
+      bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:900;' +
+        'display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;background:#fbf8ee;' +
+        'border:1px solid #8a6d1f;border-radius:24px;box-shadow:0 4px 14px rgba(66,55,42,.2);' +
+        'font-size:13px;color:#42372a;white-space:nowrap;max-width:92vw;';
+      var txt = document.createElement('span');
+      txt.textContent = '把「济时笺」安装到桌面，全屏使用';
+      var ok = document.createElement('button');
+      ok.textContent = '安装';
+      ok.style.cssText = 'flex:none;border:none;background:#8a6d1f;color:#fff;border-radius:16px;' +
+        'padding:6px 14px;font-size:13px;cursor:pointer;';
+      ok.onclick = function () {
+        if (!deferred) return;
+        deferred.prompt();
+        var choice = deferred.userChoice;
+        deferred = null;
+        bar.remove();
+        if (choice && choice.finally) choice.finally(function () {});
+      };
+      var no = document.createElement('button');
+      no.textContent = '×';
+      no.title = '关闭';
+      no.style.cssText = 'flex:none;border:none;background:transparent;color:#8b7d5f;' +
+        'font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;';
+      no.onclick = function () { bar.remove(); };
+      bar.appendChild(txt);
+      bar.appendChild(ok);
+      bar.appendChild(no);
+      document.body.appendChild(bar);
+    }
+  } catch (e) { /* 安装引导失败不影响主功能 */ }
+})();
 </script>
 </body>
 </html>
